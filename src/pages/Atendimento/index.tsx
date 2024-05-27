@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-inline-styles */
 import { useNavigation } from '@react-navigation/native';
 import {
   Button,
@@ -9,9 +10,8 @@ import {
   Text,
   VStack,
   useToast,
-  useClipboard,
 } from 'native-base';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ItemModel } from '../../models/ItemModel';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import IconFeather from 'react-native-vector-icons/Feather';
@@ -22,11 +22,10 @@ import {
   createItemList,
   deleteItemList,
   loadItemList,
-  updateItemList,
 } from '../../store/ducks/itemList/actions';
 import { formatDecimal } from '../../utils/formatDecimal';
 import { formatCurrency } from '../../utils/formatCurrency';
-import { FlatList as FlatListRectNative } from 'react-native';
+import { FlatList as FlatListRectNative, SafeAreaView } from 'react-native';
 import { ICreateItemsDTO } from '../../DTOS/ICreateItemsDTO';
 import { IResultItemsDTO } from '../../DTOS/IResultItemsDTO';
 import { setUtl } from '../../services/api';
@@ -41,13 +40,17 @@ import uuid from 'react-native-uuid';
 import { createItemEdit } from '../../store/ducks/itemEdit/actions';
 import { FechamentoModal } from './FechamentoModal';
 import { AlertDialogModal } from '../../components/AlertDialogModal';
+import { MesaDestinoModal } from './MesaDestinoModal';
+import { loadFlavorsSelected } from '../../store/ducks/flavorsSelected/actions';
+import { FlavorModel } from '../../models/FlavorModel';
+import { useProductSearch } from '../../hooks/product';
 
 const Atendimento: React.FC = () => {
+  const { obsFlavorTyping } = useProductSearch();
   const flatProdutos = useRef<FlatListRectNative>();
   const navigate = useNavigation();
   const dispatch = useDispatch();
   const toast = useToast();
-  const [itemIsEditing, setItemIsEditing] = useState<boolean>(false);
   const configEdit = useSelector((state: RootState) => state.configEdit.data);
   const grupoEdit = useSelector((state: RootState) => state.grupoEdit.data);
   const grupoList = useSelector((state: RootState) => state.grupoList.data);
@@ -56,14 +59,16 @@ const Atendimento: React.FC = () => {
     (state: RootState) => state.atendenteEdit.data,
   );
   const itemList = useSelector((state: RootState) => state.itemList.data);
-  const [mesaDestino, setMesaDestino] = useState('');
+  const companyEdit = useSelector((state: RootState) => state.companyEdit.data);
+
   const [sendingRequest, setSendingRequest] = useState(false);
   const [showFechamento, setShowFechamento] = useState(false);
+  const [showMesaDestino, setShowMesaDestino] = useState(false);
   const [alertDialogShow, setAlertDialogShow] = useState(false);
 
   const loadItems = useCallback(() => {
     if (comandaEdit.criada) {
-      const api = setUtl(configEdit.ip);
+      const api = setUtl(companyEdit.ip, companyEdit.porta);
       api
         .get<ItemModel[]>(`itens/${comandaEdit.codigo}`)
         .then(response => {
@@ -72,6 +77,7 @@ const Atendimento: React.FC = () => {
         .catch(() => {
           toast.show({
             description: 'Sem comunicação com API!',
+            duration: 1000,
           });
           navigate.navigate('signin');
         });
@@ -81,48 +87,65 @@ const Atendimento: React.FC = () => {
   }, [
     comandaEdit.codigo,
     comandaEdit.criada,
-    configEdit.ip,
+    companyEdit.ip,
+    companyEdit.porta,
     dispatch,
     navigate,
+    toast,
   ]);
 
   useEffect(() => {
     loadItems();
   }, [loadItems]);
 
-  const handleSendRequest = useCallback(async () => {
+  const existsItemsToSend = useMemo(() => {
+    const dataFilter = itemList.filter(opt => opt.impresso === 'N');
+    return dataFilter.length > 0 ? true : false;
+  }, [itemList]);
+
+  const dataToSendFiltered = useMemo(() => {
+    const dataFilter = itemList.filter(opt => opt.impresso === 'N');
+    return dataFilter;
+  }, [itemList]);
+
+  const handleSendRequest = async (destino: string) => {
     try {
-      const dataFilter = itemList.filter(opt => opt.impresso === 'N');
-      if (dataFilter.length === 0) {
-        toast.show({
-          description: 'Nenum produto para ser enviado!',
-        });
-        return;
-      }
       setSendingRequest(true);
 
-      const api = setUtl(configEdit.ip);
+      // const dataFilter = itemList.filter(opt => opt.impresso === 'N');
+      if (!existsItemsToSend) {
+        toast.show({
+          description: 'Nenum produto para ser enviado!',
+          duration: 1000,
+        });
+        setSendingRequest(false);
+        return;
+      }
+
+      const api = setUtl(companyEdit.ip, companyEdit.porta);
       const newComanda = {
         mesa: comandaEdit.comanda,
         codAtendente: atendenteEdit.codigo,
+        mesaDestino: destino,
       };
       const responseMesas = await api.put('/mesas', newComanda);
       const codMesaInserted = responseMesas.data[0].oretorno;
       if (codMesaInserted === 0) {
         toast.show({
           description: 'Comanda fechada! Dirija-se ao caixa!',
+          duration: 1000,
         });
         setSendingRequest(false);
         return;
       } else {
-        const dataToSend: ICreateItemsDTO[] = dataFilter.map(item => {
+        const dataToSend: ICreateItemsDTO[] = dataToSendFiltered.map(item => {
           return {
             codMesa: codMesaInserted,
             codProduto: item.produtoCodigo,
             qtde: item.quantidade,
             obs: item.obs,
             codAtendente: atendenteEdit.codigo,
-            destino: mesaDestino,
+            destino: destino,
             mobileId: item.mobileId,
             combinado: item.combinado,
             codCombinado: '',
@@ -133,7 +156,7 @@ const Atendimento: React.FC = () => {
                 qtde: flavor.quantidade,
                 obs: flavor.obs,
                 codAtendente: atendenteEdit.codigo,
-                destino: mesaDestino,
+                destino: destino,
                 mobileId: flavor.mobileId,
                 combinado: true,
                 codCombinado: flavor.codCombinado,
@@ -142,199 +165,177 @@ const Atendimento: React.FC = () => {
             }),
           };
         });
-        api
-          .put<IResultItemsDTO[]>('itens', dataToSend)
-          .then(response => {
-            let ok = true;
-            response.data.forEach(item => {
-              if (item.inserido === 'S') {
-                const itemToUpdated: ItemModel | undefined = itemList.find(
-                  opt => opt.mobileId === item.mobileId,
-                );
-                if (itemToUpdated) {
-                  dispatch(
-                    updateItemList({
-                      ...itemToUpdated,
-                      enviado: 'S',
-                      impresso: 'S',
-                    }),
-                  );
-                }
-              } else {
-                ok = false;
-              }
+        try {
+          api.put<IResultItemsDTO[]>('itens', dataToSend).then(() => {
+            api.get<ComandaModel[]>('/mesas').then(respComandas => {
+              const data = respComandas.data.map(comanda => {
+                return {
+                  ...comanda,
+                  criada: true,
+                };
+              });
+              dispatch(loadComandaList(data));
             });
-
-            if (ok) {
-              toast.show({
-                description: 'Pedido enviado com sucesso!',
-              });
-              api.get<ComandaModel[]>('/mesas').then(respComandas => {
-                const data = respComandas.data.map(comanda => {
-                  return {
-                    ...comanda,
-                    criada: true,
-                  };
-                });
-                dispatch(loadComandaList(data));
-              });
-              setSendingRequest(false);
-              navigate.navigate('comandas');
-            } else {
-              toast.show({
-                description:
-                  'Problema ao tentar enviar produtos! Você pode tentar novamente.',
-              });
-              setSendingRequest(false);
-            }
-          })
-          .catch(() => {
             toast.show({
-              description: 'Sem comunicação com API.',
+              description: 'Pedido enviado com sucesso!',
+              duration: 1000,
             });
             setSendingRequest(false);
-
-            return;
+            navigate.navigate('comandas');
           });
+        } catch (error) {
+          toast.show({
+            description:
+              'Problema ao tentar enviar produtos! Você pode tentar novamente.',
+            duration: 1000,
+          });
+          setSendingRequest(false);
+        }
       }
     } catch (erro) {
       toast.show({
         description: 'Não foi possível enviar pedido!',
+        duration: 1000,
       });
       setSendingRequest(false);
 
       return;
     }
-  }, [
-    atendenteEdit.codigo,
-    comandaEdit.codigo,
-    configEdit.ip,
-    dispatch,
-    itemList,
-    mesaDestino,
-    navigate,
-    toast,
-  ]);
+  };
 
-  const handleBack = useCallback(() => {
+  const handleBack = () => {
     const pendingItens = itemList.filter(opt => opt.enviado === 'N');
     if (pendingItens.length > 0) {
       setAlertDialogShow(true);
     } else {
       navigate.navigate('comandas');
     }
-  }, [navigate]);
+  };
 
-  const handleItemEdit = useCallback(
-    (item: ItemModel) => {
-      if (item.combinado) {
-        const grupo = grupoList.find(opt => opt.nome === item.grupo);
-        if (grupo) {
-          dispatch(createGrupoEdit(grupo));
-        }
-        dispatch(createFlavorEdit(item));
-        navigate.navigate('produtosGrupoCombinado');
-      } else {
-        dispatch(createItemEdit(item));
-        navigate.navigate('lancaPorCodigo');
+  const handleItemEdit = (item: ItemModel) => {
+    if (item.combinado) {
+      const grupo = grupoList.find(opt => opt.nome === item.grupo);
+      if (grupo) {
+        dispatch(createGrupoEdit(grupo));
       }
-    },
-    [dispatch, grupoList, navigate],
-  );
-
-  const handleItemDelete = useCallback(
-    (item: ItemModel) => {
-      dispatch(deleteItemList(item));
-    },
-    [dispatch],
-  );
-
-  const handleRepeat = useCallback(
-    (item: ItemModel) => {
-      if (item.combinado) {
-        const flavors: ItemModel[] = item.flavors.map(flavor => {
-          const newCodigo = new Date().getTime();
-          console.log(flavor);
+      dispatch(createFlavorEdit(item));
+      let obsItem = '';
+      const flavorsSelectedData: FlavorModel[] = item.flavors.map(
+        flavorItem => {
+          if (flavorItem.obs.toString().trim() !== '') {
+            obsItem = flavorItem.obs;
+          }
           return {
-            mobileId: uuid.v4().toString(),
-            codigo: newCodigo.toString(),
-            comandaCodigo: comandaEdit.codigo,
-            funcionarioCodigo: atendenteEdit.codigo,
-            produtoCodigo: flavor.produtoCodigo,
-            descricao: flavor.descricao,
-            unidade: 'UN',
-            quantidade: flavor.quantidade,
-            unitario: flavor.unitario,
-            total: flavor.total,
-            hora: newCodigo,
-            grupo: flavor.grupo,
-            subgrupo: flavor.subgrupo,
-            impresso: 'N',
-            obs: flavor.obs,
-            enviado: 'N',
-            combinado: false,
-            codCombinado: '',
-            flavors: [] as ItemModel[],
+            codigo: flavorItem.produtoCodigo,
+            nome: flavorItem.descricao,
+            unidade: flavorItem.unidade,
+            preco: flavorItem.unitario,
+            grupo: flavorItem.grupo,
+            subgrupo: flavorItem.subgrupo,
+            fracionado: 'S',
+            impressao: 'N',
+            selected: true,
+            obs: flavorItem.obs,
           };
-        });
-        console.log(flavors);
+        },
+      );
+      dispatch(loadFlavorsSelected(flavorsSelectedData));
+      obsFlavorTyping(obsItem);
+      navigate.navigate('produtosGrupoCombinado');
+    } else {
+      dispatch(createItemEdit(item));
+      navigate.navigate('lancaPorCodigo');
+    }
+  };
+
+  const handleItemDelete = (item: ItemModel) => {
+    dispatch(deleteItemList(item));
+  };
+
+  const handleRepeat = (item: ItemModel) => {
+    if (item.combinado) {
+      const flavors: ItemModel[] = item.flavors.map(flavor => {
         const newCodigo = new Date().getTime();
-        const newItem: ItemModel = {
+        return {
           mobileId: uuid.v4().toString(),
           codigo: newCodigo.toString(),
           comandaCodigo: comandaEdit.codigo,
           funcionarioCodigo: atendenteEdit.codigo,
-          produtoCodigo: item.produtoCodigo,
-          descricao: item.descricao,
-          unidade: item.unidade,
-          quantidade: item.quantidade,
-          unitario: item.unitario,
-          total: item.total,
+          produtoCodigo: flavor.produtoCodigo,
+          descricao: flavor.descricao,
+          unidade: 'UN',
+          quantidade: flavor.quantidade,
+          unitario: flavor.unitario,
+          total: flavor.total,
           hora: newCodigo,
-          grupo: item.grupo,
-          subgrupo: item.subgrupo,
+          grupo: flavor.grupo,
+          subgrupo: flavor.subgrupo,
           impresso: 'N',
-          obs: item.obs,
-          enviado: 'N',
-          combinado: true,
-          codCombinado: '',
-          flavors: flavors as ItemModel[],
-        };
-        dispatch(createItemList(newItem));
-      } else {
-        const newCodigo = new Date().getTime();
-        const newItem: ItemModel = {
-          mobileId: uuid.v4().toString(),
-          codigo: newCodigo.toString(),
-          comandaCodigo: comandaEdit.codigo,
-          funcionarioCodigo: atendenteEdit.codigo,
-          produtoCodigo: item.codigo,
-          descricao: item.descricao,
-          unidade: item.unidade,
-          quantidade: item.quantidade,
-          unitario: item.unitario,
-          total: item.total,
-          hora: newCodigo,
-          grupo: item.grupo,
-          subgrupo: item.subgrupo,
-          impresso: 'N',
-          obs: item.obs,
+          obs: flavor.obs,
           enviado: 'N',
           combinado: false,
           codCombinado: '',
           flavors: [] as ItemModel[],
+          repeat: true,
         };
-        dispatch(createItemList(newItem));
-      }
-    },
-    [atendenteEdit.codigo, comandaEdit.codigo, dispatch],
-  );
+      });
+      const newCodigo = new Date().getTime();
+      const newItem: ItemModel = {
+        mobileId: uuid.v4().toString(),
+        codigo: newCodigo.toString(),
+        comandaCodigo: comandaEdit.codigo,
+        funcionarioCodigo: atendenteEdit.codigo,
+        produtoCodigo: item.produtoCodigo,
+        descricao: item.descricao,
+        unidade: item.unidade,
+        quantidade: item.quantidade,
+        unitario: item.unitario,
+        total: item.total,
+        hora: newCodigo,
+        grupo: item.grupo,
+        subgrupo: item.subgrupo,
+        impresso: 'N',
+        obs: item.obs,
+        enviado: 'N',
+        combinado: true,
+        codCombinado: '',
+        flavors: flavors as ItemModel[],
+        repeat: true,
+      };
+      dispatch(createItemList(newItem));
+    } else {
+      const newCodigo = new Date().getTime();
+      const newItem: ItemModel = {
+        mobileId: uuid.v4().toString(),
+        codigo: newCodigo.toString(),
+        comandaCodigo: comandaEdit.codigo,
+        funcionarioCodigo: atendenteEdit.codigo,
+        produtoCodigo: item.produtoCodigo,
+        descricao: item.descricao,
+        unidade: item.unidade,
+        quantidade: item.quantidade,
+        unitario: item.unitario,
+        total: item.total,
+        hora: newCodigo,
+        grupo: item.grupo,
+        subgrupo: item.subgrupo,
+        impresso: 'N',
+        obs: item.obs,
+        enviado: 'N',
+        combinado: false,
+        codCombinado: '',
+        flavors: [] as ItemModel[],
+        repeat: true,
+      };
+      dispatch(createItemList(newItem));
+    }
+  };
 
-  const handleAddProduct = useCallback(() => {
+  const handleAddProduct = () => {
     navigate.navigate('lancaPorCodigo');
-  }, [navigate]);
+  };
 
-  const handleListByGroup = useCallback(() => {
+  const handleListByGroup = () => {
     if (grupoEdit) {
       dispatch(
         updateGrupoList({
@@ -345,20 +346,20 @@ const Atendimento: React.FC = () => {
       dispatch(createGrupoEdit({} as GrupoModel));
     }
     navigate.navigate('listaPorSubgrupo');
-  }, [dispatch, grupoEdit, navigate]);
+  };
 
-  const handleCombinedProduct = useCallback(() => {
+  const handleCombinedProduct = () => {
     navigate.navigate('gruposDeCombinados');
-  }, [navigate]);
+  };
 
-  const handleShowFechamento = useCallback(() => {
+  const handleShowFechamento = () => {
     setShowFechamento(true);
-  }, []);
+  };
 
-  const handleCloseFechamento = useCallback(async (closeBill: boolean) => {
+  const handleCloseFechamento = async (closeBill: boolean) => {
     setShowFechamento(false);
     if (closeBill) {
-      const api = setUtl(configEdit.ip);
+      const api = setUtl(companyEdit.ip, companyEdit.porta);
       try {
         const response = await api.get<ComandaModel[]>('/mesas');
         const data = response.data.map(comanda => {
@@ -372,22 +373,49 @@ const Atendimento: React.FC = () => {
       } catch {
         toast.show({
           description: 'Problemas ao fechar a conta. Dirija-se ao caixa.',
+          duration: 1000,
         });
       }
     }
-  }, []);
+  };
 
-  const handleCancelBack = useCallback(() => {
+  const handleCancelBack = () => {
     setAlertDialogShow(false);
-  }, []);
+  };
 
-  const handleConfirmBack = useCallback(() => {
+  const handleConfirmBack = () => {
     setAlertDialogShow(false);
     navigate.navigate('comandas');
-  }, [navigate]);
+  };
+
+  const handleSendCancel = () => {
+    setShowMesaDestino(false);
+  };
+
+  const handleMesaDestino = () => {
+    if (!existsItemsToSend) {
+      toast.show({
+        description: 'Nenum produto para ser enviado!',
+        duration: 1000,
+      });
+      return;
+    }
+    setShowMesaDestino(true);
+  };
 
   return (
-    <>
+    <SafeAreaView
+      style={{
+        flex: 1,
+        backgroundColor: '#121214',
+      }}>
+      {showMesaDestino && (
+        <MesaDestinoModal
+          isOpen={showMesaDestino}
+          handleCancel={handleSendCancel}
+          handleConfirm={handleSendRequest}
+        />
+      )}
       {alertDialogShow && (
         <AlertDialogModal
           isOpen={alertDialogShow}
@@ -454,11 +482,13 @@ const Atendimento: React.FC = () => {
                         fontWeight="bold"
                         textAlign="right"
                         w="100%">{`${formatCurrency(item.total)}`}</Text>
-                      {item.obs.trim() !== '' && (
-                        <Text
-                          fontSize={12}
-                          fontStyle="italic">{`Obs: ${item.obs}`}</Text>
-                      )}
+                      {item.obs !== undefined &&
+                        item.obs !== null &&
+                        String(item.obs).trim() !== '' && (
+                          <Text
+                            fontSize={12}
+                            fontStyle="italic">{`Obs: ${item.obs}`}</Text>
+                        )}
                     </VStack>
                     <Button onPress={() => handleRepeat(item)}>
                       <Icon name="repeat" size={30} color="#fff" />
@@ -488,11 +518,13 @@ const Atendimento: React.FC = () => {
                         fontWeight="bold"
                         textAlign="right"
                         w="100%">{`${formatCurrency(item.total)}`}</Text>
-                      {!item.obs === undefined && (
-                        <Text
-                          fontSize={12}
-                          fontStyle="italic">{`Obs: ${item.obs}`}</Text>
-                      )}
+                      {item.obs !== undefined &&
+                        item.obs !== null &&
+                        String(item.obs).trim() !== '' && (
+                          <Text
+                            fontSize={12}
+                            fontStyle="italic">{`Obs: ${item.obs}`}</Text>
+                        )}
                     </VStack>
                     <Button onPress={() => handleRepeat(item)}>
                       <Icon name="repeat" size={30} color="#fff" />
@@ -506,6 +538,12 @@ const Atendimento: React.FC = () => {
                     <Button onPress={() => handleItemDelete(item)}>
                       <Icon name="delete" size={30} color="#c11e1e" />
                     </Button>
+                    {item.repeat && (
+                      <Center>
+                        <Icon name="repeat" size={30} color="#fff" />
+                        <Text color="#fff">Item repetido</Text>
+                      </Center>
+                    )}
                     <Button onPress={() => handleItemEdit(item)}>
                       <Icon name="edit" size={30} color="#fff" />
                     </Button>
@@ -552,10 +590,13 @@ const Atendimento: React.FC = () => {
             w="49%"
             colorScheme="amber"
             h={54}
-            fontFamily="heading"
-            fontSize="md"
             onPress={handleBack}>
-            Voltar
+            <Center>
+              <IconFeather name="arrow-left" size={18} color="#d97706" />
+              <Text color="amber.600" fontSize="14px" fontWeight="bold">
+                Voltar
+              </Text>
+            </Center>
           </Button>
           <Button
             w="49%"
@@ -565,7 +606,11 @@ const Atendimento: React.FC = () => {
             fontSize="md"
             isLoading={sendingRequest}
             isLoadingText="Enviando pedido"
-            onPress={handleSendRequest}>
+            onPress={
+              configEdit.destino
+                ? handleMesaDestino
+                : () => handleSendRequest('')
+            }>
             <Center>
               <IconFeather name="printer" size={20} color="#fff" />
               <Text color="white">Enviar pedido</Text>
@@ -573,7 +618,7 @@ const Atendimento: React.FC = () => {
           </Button>
         </HStack>
       </VStack>
-    </>
+    </SafeAreaView>
   );
 };
 

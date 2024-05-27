@@ -1,7 +1,9 @@
+/* eslint-disable react-native/no-inline-styles */
 import { useNavigation } from '@react-navigation/native';
 import {
   Box,
   Button,
+  Center,
   FlatList,
   Flex,
   Heading,
@@ -13,10 +15,14 @@ import {
 } from 'native-base';
 import { useCallback, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-// import { Button } from '../../components/Button';
 import { GrupoModel } from '../../models/GrupoModel';
 import { RootState } from '../../store/ducks/combineReducers';
 import { createGrupoEdit } from '../../store/ducks/grupoEdit/actions';
+import IconFeather from 'react-native-vector-icons/Feather';
+import { FlavorModel } from '../../models/FlavorModel';
+import { loadFlavorList } from '../../store/ducks/flavorList/actions';
+import { ProdutoModel } from '../../models/ProdutoModel';
+import { SafeAreaView } from 'react-native';
 
 const GruposDeCombinados: React.FC = () => {
   const navigate = useNavigation();
@@ -24,25 +30,38 @@ const GruposDeCombinados: React.FC = () => {
 
   const grupoList = useSelector((state: RootState) => state.grupoList.data);
   const comandaEdit = useSelector((state: RootState) => state.comandaEdit.data);
+  const produtoList = useSelector((state: RootState) => state.produtoList.data);
 
   const gruposDeFracionados = useMemo(() => {
     return grupoList.filter(item => item.combinado === 'S');
   }, [grupoList]);
 
-  const handleBack = useCallback(() => {
+  const handleBack = () => {
     navigate.navigate('atendimento');
-  }, [navigate]);
+  };
 
-  const handlePressGroup = useCallback(
-    (item: GrupoModel) => {
-      dispatch(createGrupoEdit(item));
-      navigate.navigate('produtosGrupoCombinado');
-    },
-    [dispatch, navigate],
-  );
+  const handlePressGroup = (item: GrupoModel) => {
+    dispatch(createGrupoEdit(item));
+    const dataList: ProdutoModel[] = produtoList.filter(
+      opt => opt.grupo === item.nome,
+    );
+    const dataToDispatch: FlavorModel[] = dataList.map(dataItem => {
+      return {
+        ...dataItem,
+        selected: false,
+        obs: '',
+      };
+    });
+    dispatch(loadFlavorList(dataToDispatch));
+    navigate.navigate('produtosGrupoCombinado');
+  };
 
   return (
-    <>
+    <SafeAreaView
+      style={{
+        flex: 1,
+        backgroundColor: '#121214',
+      }}>
       <VStack
         bg={'gray.800'}
         flex={1}
@@ -117,11 +136,16 @@ const GruposDeCombinados: React.FC = () => {
             fontFamily="heading"
             fontSize="md"
             onPress={handleBack}>
-            Voltar
+            <Center>
+              <IconFeather name="arrow-left" size={18} color="#d97706" />
+              <Text color="amber.600" fontSize="14px" fontWeight="bold">
+                Voltar
+              </Text>
+            </Center>
           </Button>
         </HStack>
       </VStack>
-    </>
+    </SafeAreaView>
   );
 };
 

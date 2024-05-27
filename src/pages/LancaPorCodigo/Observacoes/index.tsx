@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-inline-styles */
 import { useNavigation } from '@react-navigation/native';
 import {
   Box,
@@ -17,6 +18,7 @@ import { useCallback, useState } from 'react';
 import { Input } from '../../../components/Input';
 import { ObservacoesModel } from '../../../models/ObservacoesModel';
 import IconFeather from 'react-native-vector-icons/Feather';
+import { SafeAreaView } from 'react-native';
 
 const Observacoes: React.FC = () => {
   const navigate = useNavigation();
@@ -74,20 +76,20 @@ const Observacoes: React.FC = () => {
     },
   ]);
 
-  const handleBack = useCallback(() => {
+  const handleBack = () => {
     navigate.navigate('lancaPorCodigo');
-  }, [navigate]);
+  };
 
-  const handleContinue = useCallback(() => {
+  const handleContinue = () => {
     navigate.navigate('atendimento');
-  }, [navigate]);
-
-  const handlePressObs = useCallback((obs: ObservacoesModel) => {
-    console.log(obs);
-  }, []);
+  };
 
   return (
-    <>
+    <SafeAreaView
+      style={{
+        flex: 1,
+        backgroundColor: '#121214',
+      }}>
       <VStack
         bg={'gray.800'}
         flex={1}
@@ -115,13 +117,7 @@ const Observacoes: React.FC = () => {
             data={obsList}
             numColumns={2}
             renderItem={({ item }) => (
-              <Pressable
-                mr={1}
-                maxW="96"
-                minW="49%"
-                onPress={() => handlePressObs(item)}
-                mb={1}
-                key="item.id">
+              <Pressable mr={1} maxW="96" minW="49%" mb={1} key="item.id">
                 {({ isHovered, isPressed }) => {
                   return (
                     <Box
@@ -186,7 +182,7 @@ const Observacoes: React.FC = () => {
           </Button>
         </HStack>
       </VStack>
-    </>
+    </SafeAreaView>
   );
 };
 

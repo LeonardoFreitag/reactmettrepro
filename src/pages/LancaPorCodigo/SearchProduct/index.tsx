@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-inline-styles */
 import { useNavigation } from '@react-navigation/native';
 import {
   Button,
@@ -18,6 +19,7 @@ import { formatDecimal } from '../../../utils/formatDecimal';
 import IconMaterial from 'react-native-vector-icons/MaterialIcons';
 import { ProdutoModel } from '../../../models/ProdutoModel';
 import { useProductSearch } from '../../../hooks/product';
+import { SafeAreaView } from 'react-native';
 
 export const SearchProduct: React.FC = () => {
   const navigate = useNavigation();
@@ -40,7 +42,6 @@ export const SearchProduct: React.FC = () => {
 
   const handleSelectData = useCallback(
     (item: ProdutoModel) => {
-      console.log(item);
       productCodeTyping(item.codigo);
       navigate.navigate('lancaPorCodigo');
     },
@@ -48,7 +49,11 @@ export const SearchProduct: React.FC = () => {
   );
 
   return (
-    <>
+    <SafeAreaView
+      style={{
+        flex: 1,
+        backgroundColor: '#121214',
+      }}>
       <VStack bg={'gray.800'} flex={2} alignItems="center" padding={4}>
         <Heading color="white" mb={2}>
           {`Comanda: ${comandaEdit.comanda}`}
@@ -82,9 +87,7 @@ export const SearchProduct: React.FC = () => {
                     padding={2}
                     mb={1}>
                     <VStack w="80%">
-                      <Text fontWeight="bold">{`${formatDecimal(
-                        item.codigo,
-                      )} - ${item.nome}`}</Text>
+                      <Text fontWeight="bold">{`${item.codigo} - ${item.nome}`}</Text>
                       <Text
                         color="green.600"
                         fontWeight="bold"
@@ -113,7 +116,7 @@ export const SearchProduct: React.FC = () => {
           </HStack>
         </VStack>
       </VStack>
-    </>
+    </SafeAreaView>
   );
 };
 

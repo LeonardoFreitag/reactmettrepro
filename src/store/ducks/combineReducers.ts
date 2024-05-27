@@ -15,6 +15,10 @@ import ProdutoListReducer from './produtoList';
 import FlavorEditReducer from './flavorEdit';
 import SubgrupoEditReducer from './subgrupoEdit';
 import SubgrupoListReducer from './subgrupoList';
+import FlavorListReducer from './flavorList';
+import FlavorsSelectedReducer from './flavorsSelected';
+import CompanyEditReducer from './companyEdit';
+import CompanyListReducer from './companyList';
 
 // import UserReducer from './user';
 
@@ -35,7 +39,10 @@ const rootReducer = combineReducers({
   produtoEdit: ProdutoEditReducer,
   produtoList: ProdutoListReducer,
   flavorEdit: FlavorEditReducer,
-
+  flavorList: FlavorListReducer,
+  flavorsSelected: FlavorsSelectedReducer,
+  companyEdit: CompanyEditReducer,
+  companyList: CompanyListReducer,
   // user: UserReducer,
 });
 

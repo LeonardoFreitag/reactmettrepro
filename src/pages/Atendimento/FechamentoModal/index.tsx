@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Button, Modal, Text, Center } from 'native-base';
 import IconFeather from 'react-native-vector-icons/Feather';
 import { setUtl } from '../../../services/api';
@@ -16,28 +16,34 @@ export const FechamentoModal: React.FC<FechamentoModalProps> = ({
 }: FechamentoModalProps) => {
   const configEdit = useSelector((state: RootState) => state.configEdit.data);
   const comandaEdit = useSelector((state: RootState) => state.comandaEdit.data);
+  const [sendingRequest, setSendingRequest] = useState(false);
+  const companyEdit = useSelector((state: RootState) => state.companyEdit.data);
 
-  const handlePrintPartial = useCallback(() => {
-    const api = setUtl(configEdit.ip);
+  const handlePrintPartial = () => {
+    setSendingRequest(true);
+    const api = setUtl(companyEdit.ip, companyEdit.porta);
     const comanda = {
       codigo: comandaEdit.codigo,
       destino: 'C',
     };
     api.post('/mesas/fechaConta', comanda).then(() => {
       handleCancel(false);
+      setSendingRequest(false);
     });
-  }, [comandaEdit.codigo, configEdit.ip, handleCancel]);
+  };
 
-  const handleCloseAccount = useCallback(() => {
-    const api = setUtl(configEdit.ip);
+  const handleCloseAccount = () => {
+    setSendingRequest(true);
+    const api = setUtl(companyEdit.ip, companyEdit.porta);
     const comanda = {
       codigo: comandaEdit.codigo,
       destino: 'F',
     };
     api.post('/mesas/fechaConta', comanda).then(() => {
       handleCancel(true);
+      setSendingRequest(false);
     });
-  }, [comandaEdit.codigo, configEdit.ip, handleCancel]);
+  };
 
   return (
     <>
@@ -62,7 +68,9 @@ export const FechamentoModal: React.FC<FechamentoModalProps> = ({
               <Button
                 onPress={handleCloseAccount}
                 w="32%"
-                colorScheme="darkBlue">
+                colorScheme="darkBlue"
+                isLoading={sendingRequest}
+                isLoadingText="Enviando pedido">
                 <Center>
                   <IconFeather name="printer" size={20} color="white" />
                   <Text color="white" fontSize={14}>
@@ -70,7 +78,12 @@ export const FechamentoModal: React.FC<FechamentoModalProps> = ({
                   </Text>
                 </Center>
               </Button>
-              <Button onPress={handlePrintPartial} w="32%" colorScheme="green">
+              <Button
+                onPress={handlePrintPartial}
+                w="32%"
+                colorScheme="green"
+                isLoading={sendingRequest}
+                isLoadingText="Enviando pedido">
                 <Center>
                   <IconFeather name="printer" size={20} color="white" />
                   <Text color="white" fontSize={14}>

@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-inline-styles */
 import { useNavigation, useRoute } from '@react-navigation/native';
 import {
   Box,
@@ -23,6 +24,7 @@ import { RootState } from '../../../../store/ducks/combineReducers';
 import uuid from 'react-native-uuid';
 import { createItemList } from '../../../../store/ducks/itemList/actions';
 import { ItemModel } from '../../../../models/ItemModel';
+import { SafeAreaView } from 'react-native';
 
 type RouteParams = {
   amount: string;
@@ -53,14 +55,15 @@ const ObservacoesPorGrupo: React.FC = () => {
     return data;
   }, [grupoEdit.nome, observacoesList]);
 
-  const handleBack = useCallback(() => {
+  const handleBack = () => {
     navigate.navigate('produtosPorGrupo');
-  }, [navigate]);
+  };
 
-  const handleContinue = useCallback(() => {
+  const handleContinue = () => {
     if (!produtoEdit) {
       toast.show({
         description: 'Nenhum produto selecionado!',
+        duration: 1000,
       });
       return;
     }
@@ -85,35 +88,28 @@ const ObservacoesPorGrupo: React.FC = () => {
       combinado: false,
       codCombinado: '',
       flavors: [] as ItemModel[],
+      repeat: false,
     };
     dispatch(createItemList(newItem));
-    navigate.navigate('produtosPorGrupo');
-  }, [
-    amount,
-    atendenteEdit.codigo,
-    comandaEdit.codigo,
-    dispatch,
-    navigate,
-    produtoEdit,
-    selectedObs,
-    toast,
-  ]);
+    navigate.navigate('listaPorSubgrupo');
+  };
 
-  const handlePressObs = useCallback(
-    (obs: ObservacoesModel) => {
-      let newObsLine = '';
-      if (selectedObs.trim() === '') {
-        newObsLine = `${obs.observacao}; `;
-      } else {
-        newObsLine = `${selectedObs}${obs.observacao}; `;
-      }
-      setSelectedObs(newObsLine);
-    },
-    [selectedObs],
-  );
+  const handlePressObs = (obs: ObservacoesModel) => {
+    let newObsLine = '';
+    if (selectedObs.trim() === '') {
+      newObsLine = `${obs.observacao}; `;
+    } else {
+      newObsLine = `${selectedObs}${obs.observacao}; `;
+    }
+    setSelectedObs(newObsLine);
+  };
 
   return (
-    <>
+    <SafeAreaView
+      style={{
+        flex: 1,
+        backgroundColor: '#121214',
+      }}>
       <VStack
         bg={'gray.800'}
         flex={1}
@@ -227,10 +223,13 @@ const ObservacoesPorGrupo: React.FC = () => {
             w="49%"
             colorScheme="amber"
             h={54}
-            fontFamily="heading"
-            fontSize="md"
             onPress={handleBack}>
-            Voltar
+            <Center>
+              <IconFeather name="arrow-left" size={18} color="#d97706" />
+              <Text color="amber.600" fontSize="14px" fontWeight="bold">
+                Voltar
+              </Text>
+            </Center>
           </Button>
           <Button
             w="49%"
@@ -240,12 +239,15 @@ const ObservacoesPorGrupo: React.FC = () => {
             fontSize="md"
             onPress={handleContinue}>
             <Center>
-              <Text color="white">Confirmar</Text>
+              <IconFeather name="check-square" size={18} color="#fff" />
+              <Text color="white" fontSize="14px">
+                Incluir produto
+              </Text>
             </Center>
           </Button>
         </HStack>
       </VStack>
-    </>
+    </SafeAreaView>
   );
 };
 

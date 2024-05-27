@@ -1,5 +1,5 @@
 import { useNavigation } from '@react-navigation/native';
-import { Box, VStack, useToast } from 'native-base';
+import { Box, VStack, useToast, Text } from 'native-base';
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
@@ -13,6 +13,10 @@ import { loadAtendenteList } from '../../store/ducks/atendenteList/actions';
 import { createAtendenteEdit } from '../../store/ducks/atendenteEdit/actions';
 import { UserIsloggedModel } from '../../models/UserIsLoggedModel';
 import { Logo } from './styles';
+import { companyGetAll } from '../../storage/company/companyGetAll';
+import { loadCompanyList } from '../../store/ducks/companyList/actions';
+import { CompanyList } from '../../components/CompanyList';
+import { createCompanyEdit } from '../../store/ducks/companyEdit/actions';
 
 const SignIn: React.FC = () => {
   const dispatch = useDispatch();
@@ -24,11 +28,14 @@ const SignIn: React.FC = () => {
     (state: RootState) => state.atendenteList.data,
   );
   const configEdit = useSelector((state: RootState) => state.configEdit.data);
+  const companyList = useSelector((state: RootState) => state.companyList.data);
+  const companyEdit = useSelector((state: RootState) => state.companyEdit.data);
 
-  const handleLogin = useCallback(async () => {
+  const handleLogin = async () => {
     if (configEdit === null) {
       toast.show({
         description: 'Faça as configurações do aplicativo!',
+        duration: 1000,
       });
       return;
     }
@@ -36,6 +43,7 @@ const SignIn: React.FC = () => {
     if (codigo === '' || password === '') {
       toast.show({
         description: 'Ops! Você precisa digitar um código e uma senha válidos!',
+        duration: 1000,
       });
       return;
     }
@@ -43,7 +51,7 @@ const SignIn: React.FC = () => {
     let listFromApi: AtendenteModel[] = [] as AtendenteModel[];
 
     if (atendenteList.length === 0) {
-      const api = setUtl(configEdit.ip);
+      const api = setUtl(companyEdit.ip, companyEdit.porta);
 
       api
         .get<AtendenteModel[]>('/func')
@@ -71,6 +79,7 @@ const SignIn: React.FC = () => {
           if (dataCheck.length === 0) {
             toast.show({
               description: 'Código ou senha inválidos!',
+              duration: 1000,
             });
             return;
           }
@@ -83,6 +92,7 @@ const SignIn: React.FC = () => {
             dispatch(createAtendenteEdit(atendenteLogado));
             toast.show({
               description: 'Código ou senha inválidos!',
+              duration: 1000,
             });
             return;
           }
@@ -101,6 +111,7 @@ const SignIn: React.FC = () => {
           } catch (e) {
             toast.show({
               description: 'Erro ao memorizar atendente logado!',
+              duration: 1000,
             });
           }
 
@@ -109,6 +120,7 @@ const SignIn: React.FC = () => {
         .catch(() => {
           toast.show({
             description: 'Sem comunicação com API',
+            duration: 1000,
           });
         });
     } else {
@@ -132,6 +144,7 @@ const SignIn: React.FC = () => {
       if (dataCheck.length === 0) {
         toast.show({
           description: 'Código ou senha inválidos!',
+          duration: 1000,
         });
         return;
       }
@@ -144,6 +157,7 @@ const SignIn: React.FC = () => {
         dispatch(createAtendenteEdit(atendenteLogado));
         toast.show({
           description: 'Código ou senha inválidos!',
+          duration: 1000,
         });
         return;
       }
@@ -162,62 +176,48 @@ const SignIn: React.FC = () => {
       } catch (e) {
         toast.show({
           description: 'Erro ao memorizar atendente logado!',
+          duration: 1000,
         });
       }
 
       navigate.navigate('comandas');
     }
-  }, [atendenteList, codigo, configEdit, dispatch, navigate, password]);
+    // }
+  };
 
-  const handleConfig = useCallback(() => {
+  const handleConfig = () => {
     navigate.navigate('configuracoes');
-  }, [navigate]);
+  };
+
+  const handleLoadCompanyList = useCallback(async () => {
+    const jsonValue = await companyGetAll();
+    if (jsonValue.length === 0) {
+      toast.show({
+        description: 'Cadastre uma empresa!',
+        duration: 1000,
+      });
+      return;
+    }
+    dispatch(loadCompanyList(jsonValue));
+    const activeCompany = jsonValue.find(opt => opt.isSelected === true);
+    if (!activeCompany) {
+      return;
+    }
+    dispatch(createCompanyEdit(activeCompany));
+  }, [dispatch]);
+
+  const handleLoadConfig = useCallback(async () => {
+    const jsonValue = await AsyncStorage.getItem('@mettre_config');
+    if (jsonValue !== null) {
+      const data = JSON.parse(jsonValue);
+      dispatch(createConfigEdit(data));
+    }
+  }, [dispatch]);
 
   useEffect(() => {
-    const getData = async () => {
-      try {
-        const value = await AsyncStorage.getItem('@mettre_config');
-        if (value !== null) {
-          const valurParsed = JSON.parse(value);
-          dispatch(createConfigEdit(valurParsed));
-          const api = setUtl(valurParsed.ip);
-          api
-            .get<AtendenteModel[]>('/func')
-            .then(response => {
-              const dataFuncionarios: AtendenteModel[] = response.data;
-              dispatch(loadAtendenteList(dataFuncionarios));
-            })
-            .catch(() => {
-              toast.show({
-                description: 'Sem comunicação com API!',
-              });
-            });
-
-          const isUserLogged = await AsyncStorage.getItem('@mettre_userlogged');
-          if (isUserLogged !== null) {
-            const stringConvertedData: UserIsloggedModel =
-              JSON.parse(isUserLogged);
-            const dataUser: AtendenteModel = {
-              codigo: stringConvertedData.codigo,
-              nome: stringConvertedData.nome,
-              senha: stringConvertedData.senha,
-            };
-            dispatch(createAtendenteEdit(dataUser));
-            navigate.navigate('comandas');
-          }
-        } else {
-          toast.show({
-            description: 'Faça as configurações do aplicativo!',
-          });
-        }
-      } catch (e) {
-        toast.show({
-          description: 'Erro ao realizar operação!',
-        });
-      }
-    };
-    getData();
-  }, [dispatch, navigate]);
+    handleLoadCompanyList();
+    handleLoadConfig();
+  }, [dispatch, handleLoadCompanyList, handleLoadConfig]);
 
   return (
     <VStack
@@ -229,6 +229,7 @@ const SignIn: React.FC = () => {
       <Box mb={8}>
         <Logo source={require('../../assets/Logo.png')} />
       </Box>
+      {companyList.length > 0 && <CompanyList />}
       <Input
         placeholder="Código..."
         keyboardType="number-pad"

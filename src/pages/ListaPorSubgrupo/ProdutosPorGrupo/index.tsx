@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-inline-styles */
 import { useNavigation } from '@react-navigation/native';
 import {
   Box,
@@ -12,9 +13,8 @@ import {
   Spacer,
   Text,
   VStack,
-  Button as NativeButton,
-  ScrollView,
   FormControl,
+  useToast,
 } from 'native-base';
 import { useCallback, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
@@ -22,18 +22,15 @@ import { NumberSpinner } from '../../../components/NumberSpinner';
 import { ProdutoModel } from '../../../models/ProdutoModel';
 import { RootState } from '../../../store/ducks/combineReducers';
 import { formatDecimal } from '../../../utils/formatDecimal';
-import IconFeather from 'react-native-vector-icons/Feather';
-import { ObservacoesModel } from '../../../models/ObservacoesModel';
 import { updateProdutoList } from '../../../store/ducks/produtoList/actions';
 import { createProdutoEdit } from '../../../store/ducks/produtoEdit/actions';
-
-interface ProductSelectable extends ProdutoModel {
-  selected: boolean;
-}
+import IconFeather from 'react-native-vector-icons/Feather';
+import { SafeAreaView } from 'react-native';
 
 const ProdutosPorGrupo: React.FC = () => {
   const navigate = useNavigation();
   const dispatch = useDispatch();
+  const toast = useToast();
 
   const produtoList = useSelector((state: RootState) => state.produtoList.data);
   const produtoEdit = useSelector((state: RootState) => state.produtoEdit.data);
@@ -43,7 +40,6 @@ const ProdutosPorGrupo: React.FC = () => {
     (state: RootState) => state.subgrupoEdit.data,
   );
   const [amount, setAmount] = useState('1');
-  const [selectedObs, setSelectedObs] = useState('');
   const [descTyped, setDescTyped] = useState('');
 
   const productFiltered = useMemo(() => {
@@ -56,40 +52,37 @@ const ProdutosPorGrupo: React.FC = () => {
     );
   }, [descTyped, grupoEdit.nome, produtoList, subgrupoEdit.nome]);
 
-  const handleBack = useCallback(() => {
+  const handleBack = () => {
     navigate.navigate('listaPorSubgrupo');
-  }, [navigate]);
+  };
 
-  const handlePressProduct = useCallback(
-    (item: ProdutoModel) => {
-      if (item.selected) {
-        dispatch(createProdutoEdit({} as ProdutoModel));
-        dispatch(
-          updateProdutoList({
-            ...item,
-            selected: false,
-          }),
-        );
-      } else {
-        dispatch(
-          updateProdutoList({
-            ...produtoEdit,
-            selected: false,
-          }),
-        );
-        dispatch(createProdutoEdit(item));
-        dispatch(
-          updateProdutoList({
-            ...item,
-            selected: true,
-          }),
-        );
-      }
-    },
-    [dispatch, produtoEdit],
-  );
+  const handlePressProduct = (item: ProdutoModel) => {
+    if (item.selected) {
+      dispatch(createProdutoEdit({} as ProdutoModel));
+      dispatch(
+        updateProdutoList({
+          ...item,
+          selected: false,
+        }),
+      );
+    } else {
+      dispatch(
+        updateProdutoList({
+          ...produtoEdit,
+          selected: false,
+        }),
+      );
+      dispatch(createProdutoEdit(item));
+      dispatch(
+        updateProdutoList({
+          ...item,
+          selected: true,
+        }),
+      );
+    }
+  };
 
-  const handlePressMinus = useCallback(() => {
+  const handlePressMinus = () => {
     setAmount(() => {
       let newAmount = Number(amount.replace(',', '.')) - 1;
       if (newAmount <= 0) {
@@ -98,9 +91,9 @@ const ProdutosPorGrupo: React.FC = () => {
       }
       return formatDecimal(newAmount);
     });
-  }, [amount]);
+  };
 
-  const handlePressPlus = useCallback(() => {
+  const handlePressPlus = () => {
     setAmount(() => {
       let newAmount = Number(amount.replace(',', '.')) + 1;
       if (newAmount === 1.5) {
@@ -109,17 +102,26 @@ const ProdutosPorGrupo: React.FC = () => {
       }
       return formatDecimal(newAmount);
     });
-  }, [amount]);
+  };
 
-  const handleContinue = useCallback(() => {
+  const handleContinue = () => {
     const existsSelected = productFiltered.filter(opt => opt.selected);
-    if (existsSelected) {
+    if (existsSelected.length > 0) {
       navigate.navigate('observacoesPorGrupo', { amount: amount });
+    } else {
+      toast.show({
+        description: 'Nenhum produto selecionado!',
+        duration: 1000,
+      });
     }
-  }, [amount, navigate, productFiltered]);
+  };
 
   return (
-    <>
+    <SafeAreaView
+      style={{
+        flex: 1,
+        backgroundColor: '#121214',
+      }}>
       <VStack
         bg={'gray.800'}
         flex={1}
@@ -201,28 +203,42 @@ const ProdutosPorGrupo: React.FC = () => {
         <HStack w="100%" justifyContent="space-between">
           <Button
             variant="outline"
-            w="49%"
+            w="32%"
             colorScheme="amber"
             h={54}
-            fontFamily="heading"
-            fontSize="md"
             onPress={handleBack}>
-            Voltar
+            <Center>
+              <IconFeather name="arrow-left" size={18} color="#d97706" />
+              <Text color="amber.600" fontSize="14px" fontWeight="bold">
+                Voltar
+              </Text>
+            </Center>
+          </Button>
+          <Button w="32%" colorScheme="green" h={54} onPress={handleBack}>
+            <Center>
+              <IconFeather name="thumbs-up" size={20} color="#fff" />
+              <Text color="white" fontSize="12px">
+                Conferir e enviar
+              </Text>
+            </Center>
           </Button>
           <Button
-            w="49%"
-            colorScheme="green"
+            w="32%"
+            colorScheme="darkBlue"
             h={54}
             fontFamily="heading"
             fontSize="md"
             onPress={handleContinue}>
             <Center>
-              <Text color="white">Continuar</Text>
+              <IconFeather name="arrow-right" size={18} color="#ffffff" />
+              <Text color="white" fontSize="14px" fontWeight="bold">
+                Continuar
+              </Text>
             </Center>
           </Button>
         </HStack>
       </VStack>
-    </>
+    </SafeAreaView>
   );
 };
 

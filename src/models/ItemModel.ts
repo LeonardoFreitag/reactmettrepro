@@ -18,4 +18,5 @@ export interface ItemModel {
   combinado: boolean;
   codCombinado: string;
   flavors: ItemModel[];
+  repeat: boolean;
 }

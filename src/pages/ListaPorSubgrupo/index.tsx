@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-inline-styles */
 import { useNavigation } from '@react-navigation/native';
 import {
   Box,
@@ -9,19 +10,19 @@ import {
   HStack,
   Pressable,
   Spacer,
+  Text,
   VStack,
 } from 'native-base';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { GrupoModel } from '../../models/GrupoModel';
 import { SubgrupoModel } from '../../models/SubgrupoModel';
 import { RootState } from '../../store/ducks/combineReducers';
-import {
-  createGrupoEdit,
-  updateGrupoEdit,
-} from '../../store/ducks/grupoEdit/actions';
+import { createGrupoEdit } from '../../store/ducks/grupoEdit/actions';
 import { updateGrupoList } from '../../store/ducks/grupoList/actions';
 import { createSubgrupoEdit } from '../../store/ducks/subgrupoEdit/actions';
+import IconFeather from 'react-native-vector-icons/Feather';
+import { SafeAreaView } from 'react-native';
 
 const ListarPorSubgrupo: React.FC = () => {
   const dispatch = useDispatch();
@@ -30,9 +31,6 @@ const ListarPorSubgrupo: React.FC = () => {
   const grupoList = useSelector((state: RootState) => state.grupoList.data);
   const grupoEdit = useSelector((state: RootState) => state.grupoEdit.data);
   const produtoList = useSelector((state: RootState) => state.produtoList.data);
-  const subgrupoList = useSelector(
-    (state: RootState) => state.subgrupoList.data,
-  );
 
   const subgroupFiltered = useMemo(() => {
     const dataSubgroupFiltered: SubgrupoModel[] = [] as SubgrupoModel[];
@@ -43,7 +41,6 @@ const ListarPorSubgrupo: React.FC = () => {
       };
     });
     subFromProducts.forEach(item => {
-      console.log('item', item);
       const dataIncludes = dataSubgroupFiltered.find(
         opt => opt.nome === item.nome,
       );
@@ -55,7 +52,7 @@ const ListarPorSubgrupo: React.FC = () => {
     return dataSubgroupFiltered;
   }, [grupoEdit.nome, produtoList]);
 
-  const handleBack = useCallback(() => {
+  const handleBack = () => {
     dispatch(
       updateGrupoList({
         ...grupoEdit,
@@ -64,46 +61,44 @@ const ListarPorSubgrupo: React.FC = () => {
     );
     dispatch(createGrupoEdit({} as GrupoModel));
     navigate.navigate('atendimento');
-  }, [dispatch, grupoEdit, navigate]);
+  };
 
-  const handlePressGroup = useCallback(
-    (item: GrupoModel) => {
-      if (item.selected) {
-        dispatch(createGrupoEdit({} as GrupoModel));
-        dispatch(
-          updateGrupoList({
-            ...item,
-            selected: false,
-          }),
-        );
-      } else {
-        dispatch(
-          updateGrupoList({
-            ...grupoEdit,
-            selected: false,
-          }),
-        );
-        dispatch(createGrupoEdit(item));
-        dispatch(
-          updateGrupoList({
-            ...item,
-            selected: true,
-          }),
-        );
-      }
-    },
-    [dispatch, grupoEdit],
-  );
+  const handlePressGroup = (item: GrupoModel) => {
+    if (item.selected) {
+      dispatch(createGrupoEdit({} as GrupoModel));
+      dispatch(
+        updateGrupoList({
+          ...item,
+          selected: false,
+        }),
+      );
+    } else {
+      dispatch(
+        updateGrupoList({
+          ...grupoEdit,
+          selected: false,
+        }),
+      );
+      dispatch(createGrupoEdit(item));
+      dispatch(
+        updateGrupoList({
+          ...item,
+          selected: true,
+        }),
+      );
+    }
+  };
 
-  const handlePressSubgroup = useCallback(
-    (item: SubgrupoModel) => {
-      dispatch(createSubgrupoEdit(item));
-      navigate.navigate('produtosPorGrupo');
-    },
-    [dispatch, navigate],
-  );
+  const handlePressSubgroup = (item: SubgrupoModel) => {
+    dispatch(createSubgrupoEdit(item));
+    navigate.navigate('produtosPorGrupo');
+  };
   return (
-    <>
+    <SafeAreaView
+      style={{
+        flex: 1,
+        backgroundColor: '#121214',
+      }}>
       <VStack
         bg={'gray.800'}
         flex={1}
@@ -226,17 +221,28 @@ const ListarPorSubgrupo: React.FC = () => {
         <HStack w="100%" justifyContent="space-between">
           <Button
             variant="outline"
-            w="100%"
+            w="49%"
             colorScheme="amber"
             h={54}
-            fontFamily="heading"
-            fontSize="md"
             onPress={handleBack}>
-            Voltar
+            <Center>
+              <IconFeather name="arrow-left" size={18} color="#d97706" />
+              <Text color="amber.600" fontSize="14px" fontWeight="bold">
+                Voltar
+              </Text>
+            </Center>
+          </Button>
+          <Button w="49%" colorScheme="green" h={54} onPress={handleBack}>
+            <Center>
+              <IconFeather name="thumbs-up" size={18} color="#fff" />
+              <Text color="white" fontSize="14px">
+                Conferir e enviar
+              </Text>
+            </Center>
           </Button>
         </HStack>
       </VStack>
-    </>
+    </SafeAreaView>
   );
 };
 

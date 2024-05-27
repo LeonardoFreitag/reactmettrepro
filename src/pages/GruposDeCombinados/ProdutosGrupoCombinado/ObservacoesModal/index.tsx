@@ -10,11 +10,11 @@ import {
   Heading,
   ScrollView,
 } from 'native-base';
-import { ObservacoesModel } from '../../../models/ObservacoesModel';
+import { ObservacoesModel } from '../../../../models/ObservacoesModel';
 import { useSelector } from 'react-redux';
-import { RootState } from '../../../store/ducks/combineReducers';
+import { RootState } from '../../../../store/ducks/combineReducers';
 import IconFeather from 'react-native-vector-icons/Feather';
-import { useProductSearch } from '../../../hooks/product';
+import { useProductSearch } from '../../../../hooks/product';
 
 interface ObservacoesModalProps {
   isOpen: boolean;
@@ -53,8 +53,8 @@ export const ObservacoesModal: React.FC<ObservacoesModalProps> = ({
 
   const handleContinue = useCallback(() => {
     handleSave(obsFlavor);
-    obsFlavorClear();
-  }, [handleSave, obsFlavor, obsFlavorClear]);
+    // obsFlavorClear();
+  }, [handleSave, obsFlavor]);
 
   return (
     <>
@@ -64,7 +64,7 @@ export const ObservacoesModal: React.FC<ObservacoesModalProps> = ({
           <Modal.Header>Observações</Modal.Header>
           <Modal.Body>
             <HStack w="100%" justifyContent="space-between">
-              <Input w="85%" value={obsFlavor} />
+              <Input w="85%" value={obsFlavor} onChangeText={obsFlavorTyping} />
               <Button h={54} onPress={obsFlavorClear}>
                 <IconFeather name="trash" size={20} color="#fff" />
               </Button>

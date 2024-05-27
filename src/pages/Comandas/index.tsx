@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-inline-styles */
 import { useNavigation } from '@react-navigation/native';
 import {
   Box,
@@ -34,6 +35,8 @@ import { GrupoModel } from '../../models/GrupoModel';
 import { loadGrupoList } from '../../store/ducks/grupoList/actions';
 import { SubgrupoModel } from '../../models/SubgrupoModel';
 import { loadSubgrupoList } from '../../store/ducks/subgrupoList/actions';
+import IconFeather from 'react-native-vector-icons/Feather';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const Comandas: React.FC = () => {
   const navigate = useNavigation();
@@ -46,10 +49,11 @@ const Comandas: React.FC = () => {
   );
   const [comandaTyped, setComandaTyped] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const companyEdit = useSelector((state: RootState) => state.companyEdit.data);
 
   const refreshComandas = useCallback(async () => {
     setIsRefreshing(true);
-    const api = setUtl(configEdit.ip);
+    const api = setUtl(companyEdit.ip, companyEdit.porta);
     try {
       const response = await api.get<ComandaModel[]>('/mesas');
       const data = response.data.map(comanda => {
@@ -64,24 +68,25 @@ const Comandas: React.FC = () => {
       setIsRefreshing(false);
       toast.show({
         description: 'Sem comunicação com API!',
+        duration: 1000,
       });
     }
-  }, [configEdit.ip, dispatch]);
+  }, [companyEdit.ip, companyEdit.porta, dispatch, toast]);
 
   useEffect(() => {
     const loadSubgrupos = async () => {
-      const api = setUtl(configEdit.ip);
+      const api = setUtl(companyEdit.ip, companyEdit.porta);
       try {
         const response = await api.get<SubgrupoModel[]>('/subgrupos');
         dispatch(loadSubgrupoList(response.data));
       } catch {}
     };
     loadSubgrupos;
-  }, [configEdit.ip, dispatch]);
+  }, [companyEdit.ip, companyEdit.porta, configEdit.ip, dispatch]);
 
   useEffect(() => {
     const loadGrupos = async () => {
-      const api = setUtl(configEdit.ip);
+      const api = setUtl(companyEdit.ip, companyEdit.porta);
       try {
         const response = await api.get<GrupoModel[]>('/grupos');
         const dataGroups = response.data.map(item => {
@@ -95,11 +100,11 @@ const Comandas: React.FC = () => {
       } catch {}
     };
     loadGrupos();
-  }, [configEdit.ip, dispatch]);
+  }, [companyEdit.ip, companyEdit.porta, configEdit.ip, dispatch]);
 
   useEffect(() => {
     const loadProducts = async () => {
-      const api = setUtl(configEdit.ip);
+      const api = setUtl(companyEdit.ip, companyEdit.porta);
       try {
         const response = await api.get<ProdutoModel[]>('/products');
         const data = response.data.map(item => {
@@ -113,42 +118,22 @@ const Comandas: React.FC = () => {
       } catch {}
     };
     loadProducts();
-  }, [configEdit.ip, dispatch]);
+  }, [companyEdit.ip, companyEdit.porta, configEdit.ip, dispatch]);
 
   useEffect(() => {
     const loadObservacoes = async () => {
-      const api = setUtl(configEdit.ip);
+      const api = setUtl(companyEdit.ip, companyEdit.porta);
       try {
         const response = await api.get<ObservacoesModel[]>('/obs');
         dispatch(loadObservacoesList(response.data));
       } catch {}
     };
     loadObservacoes();
-  }, [configEdit.ip, dispatch]);
+  }, [companyEdit.ip, companyEdit.porta, configEdit.ip, dispatch]);
 
   useEffect(() => {
-    // const loadComandas = async () => {
-    //   const api = setUtl(configEdit.ip);
-    //   try {
-    //     const response = await api.get<ComandaModel[]>('/mesas');
-    //     const data = response.data.map(comanda => {
-    //       return {
-    //         ...comanda,
-    //         criada: true,
-    //       };
-    //     });
-    //     dispatch(loadComandaList(data));
-    //     setIsRefreshing(false);
-    //   } catch {
-    //     toast.show({
-    //       description: 'Sem comunicação com API!',
-    //     });
-    //     return;
-    //   }
-    // };
-    // loadComandas();
     refreshComandas();
-  }, [configEdit.ip, dispatch]);
+  }, [configEdit.ip, dispatch, refreshComandas]);
 
   const listFiltered = useMemo(() => {
     return comandaList.filter(opt =>
@@ -156,24 +141,21 @@ const Comandas: React.FC = () => {
     );
   }, [comandaTyped, comandaList]);
 
-  const handlePress = useCallback(
-    (comanda: ComandaModel) => {
-      if (comanda.status === 'F') {
-        return;
-      }
-      dispatch(createComandaEdit(comanda));
-      navigate.navigate('atendimento');
-    },
-    [dispatch, navigate],
-  );
+  const handlePress = (comanda: ComandaModel) => {
+    if (comanda.status === 'F') {
+      return;
+    }
+    dispatch(createComandaEdit(comanda));
+    setComandaTyped('');
+    navigate.navigate('atendimento');
+  };
 
-  const handleExit = useCallback(async () => {
+  const handleExit = async () => {
     await AsyncStorage.removeItem('@mettre_userlogged');
     navigate.navigate('signin');
-  }, [navigate]);
+  };
 
-  const abreComanda = useCallback(() => {
-    console.log(comandaTyped);
+  const abreComanda = () => {
     if (comandaTyped.trim() === '') {
       return;
     }
@@ -181,21 +163,12 @@ const Comandas: React.FC = () => {
       opt => opt.comanda === comandaTyped,
     );
     if (!existsComanda) {
-      // abre nova comanda
-      // const api = setUtl(configEdit.ip);
-
-      // api
-      //   .put('mesas', {
-      //     mesa: comandaTyped,
-      //     codAtendente: atendenteEdit.codigo,
-      //   })
-      //   .then(response => {
-      // const newCodigoComanda = response.data[0].oretorno;
       const newCodigoComanda = new Date().getTime();
 
       if (newCodigoComanda === 0) {
         toast.show({
           description: 'Comanda está fechada!',
+          duration: 1000,
         });
         return;
       }
@@ -216,10 +189,14 @@ const Comandas: React.FC = () => {
     } else {
       handlePress(existsComanda);
     }
-  }, [comandaTyped, dispatch, handlePress, listFiltered, navigate]);
+  };
 
   return (
-    <>
+    <SafeAreaView
+      style={{
+        flex: 1,
+        backgroundColor: '#121214',
+      }}>
       <VStack
         bg={'gray.800'}
         flex={1}
@@ -274,7 +251,7 @@ const Comandas: React.FC = () => {
                       borderColor="coolGray.300">
                       <HStack alignItems="center">
                         <Box
-                          w="60px"
+                          w="140px"
                           h="60px"
                           colorScheme="darkBlue"
                           variant="solid"
@@ -282,7 +259,9 @@ const Comandas: React.FC = () => {
                           backgroundColor={comandaColor}
                           padding="4">
                           <Center>
-                            <Heading color="white">{item.comanda}</Heading>
+                            <Heading color="white" size="md">
+                              {item.comanda}
+                            </Heading>
                           </Center>
                         </Box>
                         <Spacer />
@@ -290,7 +269,7 @@ const Comandas: React.FC = () => {
                           <Text
                             color="coolGray.800"
                             fontWeight="medium"
-                            fontSize="xl"
+                            fontSize="lg"
                             textAlign="right">
                             {`Total: ${item.total.toLocaleString('pt-BR', {
                               style: 'currency',
@@ -315,20 +294,24 @@ const Comandas: React.FC = () => {
             fontFamily="heading"
             fontSize="md"
             onPress={handleExit}>
-            Sair
+            <Center>
+              <IconFeather name="log-out" size={18} color="#d97706" />
+              <Text color="amber.600" fontSize="14px" fontWeight="bold">
+                Sair
+              </Text>
+            </Center>
           </Button>
-          <Button
-            w="49%"
-            colorScheme="amber"
-            h={54}
-            fontFamily="heading"
-            fontSize="md"
-            onPress={abreComanda}>
-            Continuar
+          <Button w="49%" colorScheme="darkBlue" h={54} onPress={abreComanda}>
+            <Center>
+              <IconFeather name="arrow-right" size={18} color="#ffffff" />
+              <Text color="white" fontSize="14px" fontWeight="bold">
+                Continuar
+              </Text>
+            </Center>
           </Button>
         </HStack>
       </VStack>
-    </>
+    </SafeAreaView>
   );
 };
 
