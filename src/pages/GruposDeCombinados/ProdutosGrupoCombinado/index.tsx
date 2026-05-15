@@ -154,7 +154,7 @@ export function ProdutosGrupoCombinado() {
         </TouchableOpacity>
       )}
       <CombinedModal isOpen={showCombined} flavors={selected} total={calcTotal(selected)} onConfirm={() => { setShowCombined(false); setShowObs(true); }} onCancel={() => setShowCombined(false)} />
-      <ObservacoesModal isOpen={showObs} grupo={grupoEdit.codigo} onConfirm={handleObsConfirm} onCancel={() => setShowObs(false)} />
+      <ObservacoesModal isOpen={showObs} grupoCodigo={grupoEdit.codigo} grupoNome={grupoEdit.nome} onConfirm={handleObsConfirm} onCancel={() => setShowObs(false)} />
     </View>
   );
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import uuid from 'react-native-uuid';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
@@ -33,6 +33,7 @@ export function Atendimento() {
   const [deleteTarget, setDeleteTarget] = useState<ItemModel | null>(null);
   const [showDestino, setShowDestino] = useState(false);
   const [showFechamento, setShowFechamento] = useState(false);
+  const [sending, setSending] = useState(false);
 
   // Ref para itens pendentes — evita closure stale entre setPendingItems e sendItems
   const pendingRef = useRef<ItemModel[]>([]);
@@ -101,14 +102,16 @@ export function Atendimento() {
   }
 
   async function sendItems(items: ItemModel[], destino: string) {
+    setSending(true);
     try {
       const api = setUrl(companyEdit.ip, companyEdit.porta);
       const payload = buildPayload(items, destino);
       await api.put('/itens', payload);
-      // Transação atômica no backend — se retornou 200, todos foram inseridos
       items.forEach(item => dispatch(updateItemList({ ...item, enviado: 'S' })));
     } catch {
       Alert.alert('Erro', 'Não foi possível enviar os itens.');
+    } finally {
+      setSending(false);
     }
   }
 
@@ -262,9 +265,18 @@ export function Atendimento() {
           </TouchableOpacity>
         </View>
         <View style={styles.footerRow}>
-          <TouchableOpacity style={[styles.footerBtn, styles.btnSend]} onPress={handleEnviarPedido}>
-            <Feather name="send" size={16} color={COLORS.BACKGROUND} />
-            <Text style={[styles.footerBtnText, { color: COLORS.BACKGROUND }]}>Enviar pedido</Text>
+          <TouchableOpacity
+            style={[styles.footerBtn, styles.btnSend, sending && { opacity: 0.7 }]}
+            onPress={handleEnviarPedido}
+            disabled={sending}
+          >
+            {sending
+              ? <ActivityIndicator size="small" color={COLORS.BACKGROUND} />
+              : <Feather name="send" size={16} color={COLORS.BACKGROUND} />
+            }
+            <Text style={[styles.footerBtnText, { color: COLORS.BACKGROUND }]}>
+              {sending ? 'Enviando...' : 'Enviar pedido'}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.footerBtn, styles.btnClose]} onPress={() => setShowFechamento(true)}>
             <Feather name="x-circle" size={16} color={COLORS.WHITE} />
