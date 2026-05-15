@@ -1,8 +1,6 @@
 import React from 'react';
 import { Modal, View, Text, StyleSheet, Alert } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
-import { yupResolver } from '@hookform/resolvers/yup';
-import * as yup from 'yup';
 import { useDispatch } from 'react-redux';
 import uuid from 'react-native-uuid';
 import { Input } from '../../../components/Input';
@@ -11,29 +9,39 @@ import { companyCreate } from '../../../storage/companyStorage';
 import { createCompanyList } from '../../../store/ducks/companyList/actions';
 import { CompanyModel } from '../../../models/CompanyModel';
 import { COLORS, FONT_FAMILY, FONT_SIZE } from '../../../theme';
+import { isIpAddress } from '../../../services/api';
 
 type FormData = { nome: string; ip: string; porta: string };
-
-const schema = yup.object({
-  nome: yup.string().required('Nome obrigatório'),
-  ip: yup.string().required('IP obrigatório'),
-  porta: yup.string().required('Porta obrigatória'),
-});
 
 type Props = { isOpen: boolean; onClose: () => void };
 
 export function AddCompanyModal({ isOpen, onClose }: Props) {
   const dispatch = useDispatch();
-  const { control, handleSubmit, reset, formState: { errors } } = useForm<FormData>({
-    resolver: yupResolver(schema),
-  });
+  const { control, handleSubmit, reset, watch, formState: { errors }, setError } =
+    useForm<FormData>({ defaultValues: { nome: '', ip: '', porta: '' } });
+
+  const ipValue = watch('ip') ?? '';
+  const isIp = isIpAddress(ipValue);
 
   async function onSubmit(data: FormData) {
+    if (!data.nome.trim()) {
+      setError('nome', { message: 'Nome obrigatório' });
+      return;
+    }
+    if (!data.ip.trim()) {
+      setError('ip', { message: 'IP ou domínio obrigatório' });
+      return;
+    }
+    if (isIpAddress(data.ip) && !data.porta.trim()) {
+      setError('porta', { message: 'Porta obrigatória para endereços IP' });
+      return;
+    }
+
     const company: CompanyModel = {
       id: uuid.v4() as string,
-      nome: data.nome,
-      ip: data.ip,
-      porta: data.porta,
+      nome: data.nome.trim(),
+      ip: data.ip.trim(),
+      porta: data.porta?.trim() ?? '',
       isSelected: false,
     };
     await companyCreate(company);
@@ -47,18 +55,45 @@ export function AddCompanyModal({ isOpen, onClose }: Props) {
       <View style={styles.overlay}>
         <View style={styles.container}>
           <Text style={styles.title}>Adicionar Empresa</Text>
+
           <Controller control={control} name="nome" render={({ field: { onChange, value } }) => (
             <Input placeholder="Nome da empresa" value={value} onChangeText={onChange} mb={3} />
           )} />
           {errors.nome && <Text style={styles.error}>{errors.nome.message}</Text>}
+
           <Controller control={control} name="ip" render={({ field: { onChange, value } }) => (
-            <Input placeholder="IP (ex: 192.168.1.100)" value={value} onChangeText={onChange} keyboardType="numbers-and-punctuation" mb={3} />
+            <Input
+              placeholder="IP (192.168.1.1) ou domínio (api.empresa.com.br)"
+              value={value}
+              onChangeText={onChange}
+              keyboardType="numbers-and-punctuation"
+              autoCapitalize="none"
+              mb={3}
+            />
           )} />
           {errors.ip && <Text style={styles.error}>{errors.ip.message}</Text>}
-          <Controller control={control} name="porta" render={({ field: { onChange, value } }) => (
-            <Input placeholder="Porta (ex: 3000)" value={value} onChangeText={onChange} keyboardType="numeric" mb={4} />
-          )} />
-          {errors.porta && <Text style={styles.error}>{errors.porta.message}</Text>}
+
+          {isIp ? (
+            <>
+              <Controller control={control} name="porta" render={({ field: { onChange, value } }) => (
+                <Input
+                  placeholder="Porta (ex: 3000)"
+                  value={value}
+                  onChangeText={onChange}
+                  keyboardType="numeric"
+                  mb={4}
+                />
+              )} />
+              {errors.porta && <Text style={styles.error}>{errors.porta.message}</Text>}
+            </>
+          ) : (
+            ipValue.length > 0 && (
+              <Text style={styles.hint}>
+                Domínio detectado — porta não é necessária (HTTPS padrão)
+              </Text>
+            )
+          )}
+
           <Button title="Salvar" onPress={handleSubmit(onSubmit)} mb={2} />
           <Button title="Cancelar" variant="outline" onPress={onClose} />
         </View>
@@ -72,4 +107,5 @@ const styles = StyleSheet.create({
   container: { backgroundColor: COLORS.SURFACE_800, borderRadius: 12, padding: 24 },
   title: { color: COLORS.WHITE, fontSize: FONT_SIZE.LG, fontFamily: FONT_FAMILY.BOLD, marginBottom: 16 },
   error: { color: COLORS.DANGER, fontSize: 12, marginTop: -8, marginBottom: 8 },
+  hint: { color: COLORS.CYAN_500, fontSize: FONT_SIZE.SM, marginBottom: 16 },
 });

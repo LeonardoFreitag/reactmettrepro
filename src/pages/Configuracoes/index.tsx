@@ -74,7 +74,9 @@ export function Configuracoes() {
           <View style={styles.companyItem}>
             <View>
               <Text style={styles.companyName}>{item.nome}</Text>
-              <Text style={styles.companyInfo}>{item.ip}:{item.porta}</Text>
+              <Text style={styles.companyInfo}>
+                {item.ip}{item.porta ? `:${item.porta}` : ''}
+              </Text>
             </View>
             <TouchableOpacity onPress={() => setDeleteTarget(item)}>
               <Feather name="trash-2" size={20} color={COLORS.DANGER} />
