@@ -92,8 +92,14 @@ export function SignIn() {
       await userLoggedSave({ ...atendente, isLogged: true });
       dispatch(createAtendenteEdit(atendente));
       navigation.navigate('comandas');
-    } catch {
-      Alert.alert('Erro', 'Não foi possível conectar ao servidor. Verifique o IP e porta.');
+    } catch (err: any) {
+      const url = `http://${companyEdit.ip}:${companyEdit.porta}/func`;
+      const detail = err?.message ?? err?.code ?? 'Erro desconhecido';
+      const status = err?.response?.status;
+      const msg = status
+        ? `Servidor retornou erro ${status}.\n\n${detail}`
+        : `Não foi possível conectar.\n\nURL: ${url}\n\nDetalhe: ${detail}`;
+      Alert.alert('Erro de conexão', msg);
     } finally {
       setLoading(false);
     }
