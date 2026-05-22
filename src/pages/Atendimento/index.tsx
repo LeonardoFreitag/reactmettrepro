@@ -247,6 +247,7 @@ export function Atendimento() {
         data={[...naoImpresso, ...impresso]}
         keyExtractor={item => item.mobileId}
         renderItem={renderItem}
+        extraData={itemList}
         ListEmptyComponent={<Text style={styles.empty}>Nenhum item na comanda</Text>}
         contentContainerStyle={{ paddingBottom: 160 + insets.bottom }}
       />
@@ -299,7 +300,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: COLORS.SURFACE_800 },
   headerTitle: { color: COLORS.WHITE, fontSize: FONT_SIZE.LG, fontFamily: FONT_FAMILY.BOLD },
   headerTotal: { color: COLORS.GOLD_500, fontSize: FONT_SIZE.MD, fontFamily: FONT_FAMILY.BOLD },
-  itemCard: { backgroundColor: COLORS.SURFACE_800, margin: 8, marginBottom: 0, borderRadius: 8, overflow: 'hidden' },
+  itemCard: { backgroundColor: COLORS.SURFACE_800, margin: 8, marginBottom: 0, borderRadius: 8 },
   itemPending: { borderLeftWidth: 3, borderLeftColor: COLORS.GOLD_500 },
   itemInfo: { padding: 12 },
   itemName: { color: COLORS.WHITE, fontFamily: FONT_FAMILY.BOLD, fontSize: FONT_SIZE.MD },
