@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import uuid from 'react-native-uuid';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
@@ -24,6 +25,7 @@ type Nav = NativeStackNavigationProp<AppStackParamList, 'atendimento'>;
 export function Atendimento() {
   const navigation = useNavigation<Nav>();
   const dispatch = useDispatch();
+  const insets = useSafeAreaInsets();
   const companyEdit = useSelector((state: RootState) => state.companyEdit.data);
   const configEdit = useSelector((state: RootState) => state.configEdit.data);
   const comandaEdit = useSelector((state: RootState) => state.comandaEdit.data);
@@ -233,7 +235,7 @@ export function Atendimento() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) + 16 }]}>
         <TouchableOpacity onPress={() => navigation.navigate('comandas')}>
           <Feather name="arrow-left" size={24} color={COLORS.WHITE} />
         </TouchableOpacity>
@@ -246,10 +248,10 @@ export function Atendimento() {
         keyExtractor={item => item.mobileId}
         renderItem={renderItem}
         ListEmptyComponent={<Text style={styles.empty}>Nenhum item na comanda</Text>}
-        contentContainerStyle={{ paddingBottom: 160 }}
+        contentContainerStyle={{ paddingBottom: 160 + insets.bottom }}
       />
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <View style={styles.footerRow}>
           <TouchableOpacity style={styles.footerBtn} onPress={() => { dispatch(clearItemEdit()); dispatch(clearProdutoEdit()); navigation.navigate('lancaPorCodigo'); }}>
             <Feather name="hash" size={16} color={COLORS.WHITE} />
@@ -294,7 +296,7 @@ export function Atendimento() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.BACKGROUND },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, paddingTop: 48, backgroundColor: COLORS.SURFACE_800 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: COLORS.SURFACE_800 },
   headerTitle: { color: COLORS.WHITE, fontSize: FONT_SIZE.LG, fontFamily: FONT_FAMILY.BOLD },
   headerTotal: { color: COLORS.GOLD_500, fontSize: FONT_SIZE.MD, fontFamily: FONT_FAMILY.BOLD },
   itemCard: { backgroundColor: COLORS.SURFACE_800, margin: 8, marginBottom: 0, borderRadius: 8, overflow: 'hidden' },
