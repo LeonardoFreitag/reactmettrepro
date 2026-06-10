@@ -146,6 +146,7 @@ export function SignIn() {
             <Label>Senha</Label>
             <Input
               placeholder="Digite a senha"
+              keyboardType={configEdit.keyboardHasLetters ? 'default' : 'numeric'}
               secureTextEntry
               value={senha}
               onChangeText={setSenha}

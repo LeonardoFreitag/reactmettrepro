@@ -80,6 +80,13 @@ export function Comandas() {
   async function handleNewComanda() {
     const num = filter.trim();
     if (!num) return;
+
+    const existente = comandaList.find(c => c.comanda === num);
+    if (existente?.status === 'F') {
+      Alert.alert('Mesa fechada', `A mesa/comanda ${num} está fechada e não pode ser reaberta.`);
+      return;
+    }
+
     setCreating(true);
     try {
       const api = setUrl(companyEdit.ip, companyEdit.porta);
