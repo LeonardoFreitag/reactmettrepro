@@ -1,6 +1,21 @@
 import { ConfigEditTypes, ConfigEditState } from './types';
-const INITIAL_STATE: ConfigEditState = { data: { ip: '', destino: false, keyboardHasLetters: false } };
-export default function configEditReducer(state = INITIAL_STATE, action: { type: ConfigEditTypes; payload?: any }): ConfigEditState {
+
+const INITIAL_STATE: ConfigEditState = {
+  data: {
+    ip: '',
+    destino: false,
+    keyboardHasLetters: false,
+    cieloClientId: '',
+    cieloAccessToken: '',
+    cobrServico: 'N',
+    perServico: 0,
+  },
+};
+
+export default function configEditReducer(
+  state = INITIAL_STATE,
+  action: { type: ConfigEditTypes; payload?: any },
+): ConfigEditState {
   switch (action.type) {
     case ConfigEditTypes.CREATE:
     case ConfigEditTypes.UPDATE:

@@ -86,16 +86,27 @@ export function LancaPorCodigo() {
     });
   }
 
+  function calcServico(itemTotal: number, produto: ProdutoModel): number {
+    if (configEdit.cobrServico?.trim() === 'S' && produto.cobrarServico?.trim() === 'S') {
+      return Math.round(itemTotal * (configEdit.perServico / 100) * 100) / 100;
+    }
+    return 0;
+  }
+
   function handleConfirm() {
     if (!foundProduct) return Alert.alert('Aviso', 'Selecione um produto.');
     if (amount <= 0)    return Alert.alert('Aviso', 'Quantidade inválida.');
+
+    const itemTotal = amount * foundProduct.preco;
+    const servico   = calcServico(itemTotal, foundProduct);
 
     if (isEditing) {
       dispatch(updateItemList({
         ...itemEdit,
         quantidade: amount,
-        total: amount * foundProduct.preco,
-        obs: obsText.trim(),
+        total:      itemTotal,
+        servico,
+        obs:        obsText.trim(),
       }));
     } else {
       const item: ItemModel = {
@@ -108,7 +119,8 @@ export function LancaPorCodigo() {
         unidade:           foundProduct.unidade,
         quantidade:        amount,
         unitario:          foundProduct.preco,
-        total:             amount * foundProduct.preco,
+        total:             itemTotal,
+        servico,
         hora:              Date.now(),
         grupo:             foundProduct.grupo,
         subgrupo:          foundProduct.subgrupo,
@@ -125,7 +137,7 @@ export function LancaPorCodigo() {
     navigation.goBack();
   }
 
-  const step = foundProduct?.fracionado === 'S' ? 0.5 : 1;
+  const step = foundProduct?.fracionado?.trim() === 'S' ? 0.5 : 1;
   const filteredObs = observacoesList.filter(o =>
     foundProduct ? (o.grupo === foundProduct.grupo || o.grupo === foundProduct.subgrupo) : false
   );
@@ -160,20 +172,31 @@ export function LancaPorCodigo() {
           <Text style={styles.searchByNameText}>Buscar por nome</Text>
         </TouchableOpacity>
 
-        {foundProduct ? (
-          <View style={styles.productCard}>
-            <View style={styles.productCardHeader}>
-              <Text style={styles.productName}>{foundProduct.nome}</Text>
-              <TouchableOpacity onPress={() => { setFoundProduct(null); setCodigo(''); }}>
-                <Feather name="x" size={18} color={COLORS.GRAY_400} />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.productPrice}>R$ {foundProduct.preco.toFixed(2)}</Text>
-            <Text style={styles.productGroup}>{foundProduct.grupo} › {foundProduct.subgrupo}</Text>
-          </View>
-        ) : (
-          <Text style={styles.noProduct}>Nenhum produto selecionado</Text>
-        )}
+        {foundProduct ? (() => {
+            const itemTotal = amount * foundProduct.preco;
+            const servico   = calcServico(itemTotal, foundProduct);
+            return (
+              <View style={styles.productCard}>
+                <View style={styles.productCardHeader}>
+                  <Text style={styles.productName}>{foundProduct.nome}</Text>
+                  <TouchableOpacity onPress={() => { setFoundProduct(null); setCodigo(''); }}>
+                    <Feather name="x" size={18} color={COLORS.GRAY_400} />
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.productPrice}>R$ {foundProduct.preco.toFixed(2)}</Text>
+                {servico > 0 ? (
+                  <Text style={styles.productTotal}>
+                    R$ {itemTotal.toFixed(2)} + R$ {servico.toFixed(2)} serv. = R$ {(itemTotal + servico).toFixed(2)}
+                  </Text>
+                ) : (
+                  <Text style={styles.productTotal}>Total: R$ {itemTotal.toFixed(2)}</Text>
+                )}
+                <Text style={styles.productGroup}>{foundProduct.grupo} › {foundProduct.subgrupo}</Text>
+              </View>
+            );
+          })() : (
+            <Text style={styles.noProduct}>Nenhum produto selecionado</Text>
+          )}
 
         <NumberSpinner
           label="Quantidade"
@@ -226,6 +249,7 @@ const styles = StyleSheet.create({
   productCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   productName: { color: COLORS.WHITE, fontFamily: FONT_FAMILY.BOLD, fontSize: FONT_SIZE.LG, flex: 1 },
   productPrice: { color: COLORS.GOLD_500, fontFamily: FONT_FAMILY.BOLD, fontSize: FONT_SIZE.XL, marginTop: 4 },
+  productTotal: { color: COLORS.CYAN_500, fontSize: FONT_SIZE.SM, fontFamily: FONT_FAMILY.BOLD, marginTop: 6 },
   productGroup: { color: COLORS.GRAY_400, fontSize: FONT_SIZE.SM, marginTop: 4 },
   noProduct: { color: COLORS.GRAY_400, textAlign: 'center', marginVertical: 24 },
   obsContainer: { marginTop: 20 },

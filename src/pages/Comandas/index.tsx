@@ -57,18 +57,15 @@ export function Comandas() {
     }
   }
 
-  function getStatusColor(item: ComandaModel) {
-    if (item.status === 'F') return COLORS.GRAY_400;
-    if (item.status === 'N') return COLORS.CYAN_500;
-    if (item.criada)         return COLORS.SUCCESS;
-    return COLORS.DANGER;
+  function getStatusColors(item: ComandaModel) {
+    if (item.status === 'F') {
+      return { bg: COLORS.DANGER, text: COLORS.WHITE, subtext: 'rgba(255,255,255,0.85)' };
+    }
+    return { bg: COLORS.WHITE, text: COLORS.BACKGROUND, subtext: COLORS.GRAY_400 };
   }
 
   function getStatusLabel(item: ComandaModel) {
-    if (item.status === 'F') return 'Fechada';
-    if (item.status === 'N') return 'Nova';
-    if (item.criada)         return 'Aberta';
-    return item.status;
+    return item.status === 'F' ? 'Fechada' : 'Aberta';
   }
 
   function handleSelect(item: ComandaModel) {
@@ -170,17 +167,17 @@ export function Comandas() {
         columnWrapperStyle={styles.row}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadAll} tintColor={COLORS.GOLD_500} />}
         renderItem={({ item }) => {
-          const color = getStatusColor(item);
+          const { bg, text, subtext } = getStatusColors(item);
           const label = getStatusLabel(item);
           return (
             <TouchableOpacity
-              style={[styles.card, { borderColor: color, opacity: item.status === 'F' ? 0.55 : 1 }]}
+              style={[styles.card, { backgroundColor: bg }]}
               onPress={() => handleSelect(item)}
             >
-              <Text style={[styles.cardNumber, { color }]}>{item.comanda}</Text>
-              <Text style={styles.cardTotal}>R$ {item.total.toFixed(2)}</Text>
-              <View style={[styles.statusBadge, { backgroundColor: `${color}22`, borderColor: color }]}>
-                <Text style={[styles.statusLabel, { color }]}>{label}</Text>
+              <Text style={[styles.cardNumber, { color: text }]}>{item.comanda}</Text>
+              <Text style={[styles.cardTotal, { color: subtext }]}>R$ {item.total.toFixed(2)}</Text>
+              <View style={styles.statusBadge}>
+                <Text style={styles.statusLabel}>{label}</Text>
               </View>
             </TouchableOpacity>
           );
@@ -201,10 +198,10 @@ const styles = StyleSheet.create({
   newButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.GOLD_500, borderRadius: 8, paddingHorizontal: 16, height: 48, gap: 4 },
   newButtonText: { color: COLORS.BACKGROUND, fontFamily: FONT_FAMILY.BOLD, fontSize: FONT_SIZE.MD },
   row: { gap: 8, marginBottom: 8 },
-  card: { flex: 1, backgroundColor: COLORS.SURFACE_800, borderRadius: 8, padding: 16, borderWidth: 1.5, alignItems: 'center' },
+  card: { flex: 1, borderRadius: 8, padding: 16, alignItems: 'center' },
   cardNumber: { fontSize: FONT_SIZE.XL, fontFamily: FONT_FAMILY.BOLD },
-  cardTotal: { color: COLORS.GRAY_200, fontSize: FONT_SIZE.SM, marginTop: 4 },
-  statusBadge: { marginTop: 8, borderRadius: 10, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2 },
-  statusLabel: { fontSize: 11, fontFamily: FONT_FAMILY.BOLD },
+  cardTotal: { fontSize: FONT_SIZE.SM, marginTop: 4 },
+  statusBadge: { marginTop: 8, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.35)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)', paddingHorizontal: 8, paddingVertical: 2 },
+  statusLabel: { fontSize: 11, fontFamily: FONT_FAMILY.BOLD, color: COLORS.WHITE },
   empty: { color: COLORS.GRAY_400, textAlign: 'center', marginTop: 32 },
 });

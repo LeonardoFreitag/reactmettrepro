@@ -14,11 +14,13 @@ export const COLORS = {
 
   CYAN_700:     '#0090A8',
   CYAN_500:     '#00C2E0',
+  CYAN_400:     '#00AECB',
   CYAN_300:     '#6DDFF2',
 
   SUCCESS:      '#00B37E',
   DANGER:       '#F75A68',
   DANGER_DARK:  '#AA2834',
+  WARNING:      '#E8A800',
 };
 
 export const FONT_FAMILY = {

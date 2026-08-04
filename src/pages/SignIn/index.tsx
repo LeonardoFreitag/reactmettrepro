@@ -12,7 +12,8 @@ import { loadCompanyList } from '../../store/ducks/companyList/actions';
 import { createCompanyEdit } from '../../store/ducks/companyEdit/actions';
 import { setUrl } from '../../services/api';
 import { companyGetAll } from '../../storage/companyStorage';
-import { userLoggedSave, userLoggedGet } from '../../storage/configStorage';
+import { userLoggedSave, userLoggedGet, configGet, configSave } from '../../storage/configStorage';
+import { updateConfigEdit } from '../../store/ducks/configEdit/actions';
 import { AtendenteModel } from '../../models/AtendenteModel';
 
 import { Input } from '../../components/Input';
@@ -52,6 +53,8 @@ export function SignIn() {
     const selected = companies.find(c => c.isSelected) ?? companies[0];
     if (selected) {
       dispatch(createCompanyEdit(selected));
+      // Carrega credenciais Cielo e demais configs do servidor
+      fetchServerConfig(selected.ip, selected.porta);
     }
 
     const userLogged = await userLoggedGet();
@@ -62,6 +65,35 @@ export function SignIn() {
         senha: userLogged.senha,
       }));
       navigation.navigate('comandas');
+    }
+  }
+
+  async function fetchServerConfig(ip: string, porta?: string) {
+    try {
+      const api = setUrl(ip, porta);
+      const { data } = await api.get<{
+        vLimitePedacos: number | null;
+        cieloClientId: string;
+        cieloAccessToken: string;
+        cobrServico: string;
+        perServico: number;
+      }>('/config');
+
+      // Merge com config local (preserva ip, destino, keyboardHasLetters)
+      const stored = await configGet();
+      const updated = {
+        ip: stored?.ip ?? ip,
+        destino: stored?.destino ?? false,
+        keyboardHasLetters: stored?.keyboardHasLetters ?? false,
+        cieloClientId:    data.cieloClientId    ?? stored?.cieloClientId    ?? '',
+        cieloAccessToken: data.cieloAccessToken ?? stored?.cieloAccessToken ?? '',
+        cobrServico:      data.cobrServico      ?? stored?.cobrServico      ?? 'N',
+        perServico:       data.perServico        ?? stored?.perServico       ?? 0,
+      };
+      dispatch(updateConfigEdit(updated));
+      await configSave(updated);
+    } catch {
+      // Falha silenciosa — credenciais salvas localmente continuam válidas
     }
   }
 

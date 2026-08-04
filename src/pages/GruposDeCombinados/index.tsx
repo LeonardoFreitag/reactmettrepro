@@ -20,7 +20,7 @@ export function GruposDeCombinados() {
   const grupoList   = useSelector((state: RootState) => state.grupoList.data);
   const produtoList = useSelector((state: RootState) => state.produtoList.data);
 
-  const combinados = grupoList.filter(g => g.combinado === 'S');
+  const combinados = grupoList.filter(g => g.combinado?.trim() === 'S');
 
   function handleSelect(grupo: GrupoModel) {
     dispatch(createGrupoEdit(grupo));
