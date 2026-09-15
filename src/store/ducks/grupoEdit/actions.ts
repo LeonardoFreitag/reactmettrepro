@@ -1,30 +1,6 @@
 import { GrupoModel } from '../../../models/GrupoModel';
-import { GrupoEditTypes, GrupoEditActionsTypes } from './types';
-
-export function createGrupoEdit(grupoEdit: GrupoModel): GrupoEditActionsTypes {
-  return {
-    type: GrupoEditTypes.CREATE_GRUPOEDIT_REQUEST,
-    payload: { grupoEdit },
-  };
-}
-
-export function updateGrupoEdit(grupoEdit: GrupoModel): GrupoEditActionsTypes {
-  return {
-    type: GrupoEditTypes.UPDATE_GRUPOEDIT_REQUEST,
-    payload: { grupoEdit },
-  };
-}
-
-export function deleteGrupoEdit(grupoEdit: GrupoModel): GrupoEditActionsTypes {
-  return {
-    type: GrupoEditTypes.DELETE_GRUPOEDIT_REQUEST,
-    payload: { grupoEdit },
-  };
-}
-
-export function clearGrupoEdit(grupoEdit: GrupoModel): GrupoEditActionsTypes {
-  return {
-    type: GrupoEditTypes.CLEAR_GRUPOEDIT_REQUEST,
-    payload: { grupoEdit },
-  };
-}
+import { GrupoEditTypes } from './types';
+export const createGrupoEdit = (data: GrupoModel) => ({ type: GrupoEditTypes.CREATE, payload: data });
+export const updateGrupoEdit = (data: GrupoModel) => ({ type: GrupoEditTypes.UPDATE, payload: data });
+export const deleteGrupoEdit = () => ({ type: GrupoEditTypes.DELETE });
+export const clearGrupoEdit  = () => ({ type: GrupoEditTypes.CLEAR });

@@ -1,30 +1,6 @@
 import { ItemModel } from '../../../models/ItemModel';
-import { ItemEditTypes, ItemEditActionsTypes } from './types';
-
-export function createItemEdit(itemEdit: ItemModel): ItemEditActionsTypes {
-  return {
-    type: ItemEditTypes.CREATE_ITEMEDIT_REQUEST,
-    payload: { itemEdit },
-  };
-}
-
-export function updateItemEdit(itemEdit: ItemModel): ItemEditActionsTypes {
-  return {
-    type: ItemEditTypes.UPDATE_ITEMEDIT_REQUEST,
-    payload: { itemEdit },
-  };
-}
-
-export function deleteItemEdit(itemEdit: ItemModel): ItemEditActionsTypes {
-  return {
-    type: ItemEditTypes.DELETE_ITEMEDIT_REQUEST,
-    payload: { itemEdit },
-  };
-}
-
-export function clearItemEdit(itemEdit: ItemModel): ItemEditActionsTypes {
-  return {
-    type: ItemEditTypes.CLEAR_ITEMEDIT_REQUEST,
-    payload: { itemEdit },
-  };
-}
+import { ItemEditTypes } from './types';
+export const createItemEdit = (data: ItemModel) => ({ type: ItemEditTypes.CREATE, payload: data });
+export const updateItemEdit = (data: ItemModel) => ({ type: ItemEditTypes.UPDATE, payload: data });
+export const deleteItemEdit = () => ({ type: ItemEditTypes.DELETE });
+export const clearItemEdit  = () => ({ type: ItemEditTypes.CLEAR });

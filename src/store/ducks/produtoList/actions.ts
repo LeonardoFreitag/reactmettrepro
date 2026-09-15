@@ -1,47 +1,6 @@
 import { ProdutoModel } from '../../../models/ProdutoModel';
-import { ProdutoListTypes, ProdutoListActionsTypes } from './types';
-
-export function loadProdutoList(
-  produtoList: ProdutoModel[],
-): ProdutoListActionsTypes {
-  return {
-    type: ProdutoListTypes.LOAD_PRODUTOLIST_REQUEST,
-    payload: { produtoList },
-  };
-}
-
-export function createProdutoList(
-  produtoList: ProdutoModel,
-): ProdutoListActionsTypes {
-  return {
-    type: ProdutoListTypes.CREATE_PRODUTOLIST_REQUEST,
-    payload: { produtoList },
-  };
-}
-
-export function updateProdutoList(
-  produtoList: ProdutoModel,
-): ProdutoListActionsTypes {
-  return {
-    type: ProdutoListTypes.UPDATE_PRODUTOLIST_REQUEST,
-    payload: { produtoList },
-  };
-}
-
-export function deleteProdutoList(
-  produtoList: ProdutoModel,
-): ProdutoListActionsTypes {
-  return {
-    type: ProdutoListTypes.DELETE_PRODUTOLIST_REQUEST,
-    payload: { produtoList },
-  };
-}
-
-export function clearProdutoList(
-  produtoList: ProdutoModel,
-): ProdutoListActionsTypes {
-  return {
-    type: ProdutoListTypes.CLEAR_PRODUTOLIST_REQUEST,
-    payload: { produtoList },
-  };
-}
+import { ProdutoListTypes } from './types';
+export const loadProdutoList   = (data: ProdutoModel[]) => ({ type: ProdutoListTypes.LOAD,   payload: data });
+export const createProdutoList = (data: ProdutoModel)   => ({ type: ProdutoListTypes.CREATE, payload: data });
+export const deleteProdutoList = (codigo: string)       => ({ type: ProdutoListTypes.DELETE, payload: codigo });
+export const clearProdutoList  = ()                     => ({ type: ProdutoListTypes.CLEAR });

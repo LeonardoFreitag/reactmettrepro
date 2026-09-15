@@ -1,26 +1,21 @@
 import styled from 'styled-components/native';
+import { COLORS } from '../../theme';
 
-interface ButtonProps {
-  w: string;
-  h: string;
-  color: string;
-}
-
-interface ButtonTextProps {
-  textColor: string;
-  fontSize: string;
-}
-
-export const Button = styled.TouchableOpacity<ButtonProps>`
-  width: ${props => props.w};
-  height: ${props => props.h};
-  background-color: ${props => props.color};
-  border-radius: 5px;
-  justify-content: center;
+export const Container = styled.TouchableOpacity<{ variant?: string }>`
+  height: 54px;
   align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background-color: ${({ variant }) =>
+    variant === 'outline' ? 'transparent' :
+    variant === 'danger'  ? COLORS.DANGER :
+    COLORS.GOLD_500};
+  border-width: ${({ variant }) => variant === 'outline' ? '1px' : '0'};
+  border-color: ${COLORS.GOLD_500};
 `;
 
-export const ButtonText = styled.Text<ButtonTextProps>`
-  color: ${props => props.textColor};
-  font-size: ${props => props.fontSize};
+export const Title = styled.Text`
+  color: ${COLORS.WHITE};
+  font-size: 16px;
+  font-weight: bold;
 `;

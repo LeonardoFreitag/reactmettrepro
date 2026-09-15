@@ -1,123 +1,70 @@
-/* eslint-disable react-native/no-inline-styles */
+import React, { useState } from 'react';
+import { View, Text, FlatList, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import {
-  Button,
-  FlatList,
-  Heading,
-  HStack,
-  Input,
-  Text,
-  VStack,
-  Flex,
-  FormControl,
-} from 'native-base';
-import { useCallback, useMemo, useState } from 'react';
-import { useSelector } from 'react-redux';
-import { RootState } from '../../../store/ducks/combineReducers';
-import { formatCurrency } from '../../../utils/formatCurrency';
-import { formatDecimal } from '../../../utils/formatDecimal';
-import IconMaterial from 'react-native-vector-icons/MaterialIcons';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Feather } from '@expo/vector-icons';
+import { useDispatch, useSelector } from 'react-redux';
+import { RootState } from '../../../store/combineReducers';
+import { createProdutoEdit } from '../../../store/ducks/produtoEdit/actions';
 import { ProdutoModel } from '../../../models/ProdutoModel';
-import { useProductSearch } from '../../../hooks/product';
-import { SafeAreaView } from 'react-native';
+import { AppStackParamList } from '../../../routes';
+import { COLORS, FONT_FAMILY, FONT_SIZE } from '../../../theme';
 
-export const SearchProduct: React.FC = () => {
-  const navigate = useNavigation();
-  const { productCodeTyping } = useProductSearch();
+type Nav = NativeStackNavigationProp<AppStackParamList, 'searchProduct'>;
 
+export function SearchProduct() {
+  const navigation = useNavigation<Nav>();
+  const dispatch = useDispatch();
   const produtoList = useSelector((state: RootState) => state.produtoList.data);
-  const comandaEdit = useSelector((state: RootState) => state.comandaEdit.data);
-  const [descTyped, setDescTyped] = useState('');
+  const [search, setSearch] = useState('');
 
-  const productFiltered = useMemo(() => {
-    const data = descTyped.toLocaleLowerCase();
-    return produtoList.filter(opt =>
-      opt.nome.toLocaleLowerCase().includes(data),
-    );
-  }, [descTyped, produtoList]);
+  const filtered = search
+    ? produtoList.filter(p => p.nome.toLowerCase().includes(search.toLowerCase()))
+    : produtoList;
 
-  const handleCancel = useCallback(() => {
-    navigate.navigate('lancaPorCodigo');
-  }, [navigate]);
-
-  const handleSelectData = useCallback(
-    (item: ProdutoModel) => {
-      productCodeTyping(item.codigo);
-      navigate.navigate('lancaPorCodigo');
-    },
-    [navigate, productCodeTyping],
-  );
+  function handleSelect(item: ProdutoModel) {
+    dispatch(createProdutoEdit(item));
+    navigation.navigate('lancaPorCodigo');
+  }
 
   return (
-    <SafeAreaView
-      style={{
-        flex: 1,
-        backgroundColor: '#121214',
-      }}>
-      <VStack bg={'gray.800'} flex={2} alignItems="center" padding={4}>
-        <Heading color="white" mb={2}>
-          {`Comanda: ${comandaEdit.comanda}`}
-        </Heading>
-        <Heading color="white" size="sm">
-          {'Adicionar produto'}
-        </Heading>
-        <Heading color="white" size="sm">
-          {'Pesquisa por descrição'}
-        </Heading>
-
-        <VStack flex={1} w="100%" mb={2} mt={2}>
-          <FormControl>
-            <FormControl.Label>Descrição:</FormControl.Label>
-            <Input
-              value={descTyped}
-              onChangeText={setDescTyped}
-              color="white"
-            />
-          </FormControl>
-          <Flex flex={1} w="100%" mb={2} mt={2}>
-            <FlatList
-              data={productFiltered}
-              renderItem={({ item }) => {
-                return (
-                  <HStack
-                    w="100%"
-                    justifyContent="space-between"
-                    backgroundColor="gray.300"
-                    rounded={5}
-                    padding={2}
-                    mb={1}>
-                    <VStack w="80%">
-                      <Text fontWeight="bold">{`${item.codigo} - ${item.nome}`}</Text>
-                      <Text
-                        color="green.600"
-                        fontWeight="bold"
-                        textAlign="right"
-                        w="100%">{`${formatCurrency(item.preco)}`}</Text>
-                    </VStack>
-                    <Button onPress={() => handleSelectData(item)}>
-                      <IconMaterial name="done" size={30} color="#fff" />
-                    </Button>
-                  </HStack>
-                );
-              }}
-            />
-          </Flex>
-          <HStack w="100%" justifyContent="space-between">
-            <Button
-              variant="outline"
-              w="100%"
-              colorScheme="amber"
-              h={54}
-              fontFamily="heading"
-              fontSize="md"
-              onPress={handleCancel}>
-              Voltar
-            </Button>
-          </HStack>
-        </VStack>
-      </VStack>
-    </SafeAreaView>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Feather name="arrow-left" size={24} color={COLORS.WHITE} />
+        </TouchableOpacity>
+        <Text style={styles.title}>Buscar produto</Text>
+      </View>
+      <TextInput
+        style={styles.input}
+        placeholder="Nome do produto..."
+        placeholderTextColor={COLORS.GRAY_400}
+        value={search}
+        onChangeText={setSearch}
+        autoFocus
+      />
+      <FlatList
+        data={filtered}
+        keyExtractor={item => item.codigo}
+        renderItem={({ item }) => (
+          <TouchableOpacity style={styles.item} onPress={() => handleSelect(item)}>
+            <Text style={styles.itemName}>{item.nome}</Text>
+            <Text style={styles.itemPrice}>R$ {item.preco.toFixed(2)}</Text>
+          </TouchableOpacity>
+        )}
+        ListEmptyComponent={<Text style={styles.empty}>Nenhum produto encontrado</Text>}
+      />
+    </View>
   );
-};
+}
 
-export default SearchProduct;
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLORS.BACKGROUND, padding: 16 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 40, marginBottom: 16 },
+  title: { color: COLORS.WHITE, fontSize: FONT_SIZE.LG, fontFamily: FONT_FAMILY.BOLD },
+  input: { height: 48, backgroundColor: COLORS.SURFACE_700, borderRadius: 8, paddingHorizontal: 12, color: COLORS.WHITE, fontSize: FONT_SIZE.MD, marginBottom: 12 },
+  item: { backgroundColor: COLORS.SURFACE_800, padding: 14, borderRadius: 8, marginBottom: 8, flexDirection: 'row', justifyContent: 'space-between' },
+  itemName: { color: COLORS.WHITE, fontFamily: FONT_FAMILY.REGULAR, fontSize: FONT_SIZE.MD, flex: 1 },
+  itemPrice: { color: COLORS.GOLD_500, fontFamily: FONT_FAMILY.BOLD, fontSize: FONT_SIZE.MD },
+  empty: { color: COLORS.GRAY_400, textAlign: 'center', marginTop: 32 },
+});

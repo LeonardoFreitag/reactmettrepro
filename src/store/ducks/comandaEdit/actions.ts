@@ -1,38 +1,6 @@
 import { ComandaModel } from '../../../models/ComandaModel';
-import { ComandaEditTypes, ComandaEditActionsTypes } from './types';
-
-export function createComandaEdit(
-  comandaEdit: ComandaModel,
-): ComandaEditActionsTypes {
-  return {
-    type: ComandaEditTypes.CREATE_COMANDAEDIT_REQUEST,
-    payload: { comandaEdit },
-  };
-}
-
-export function updateComandaEdit(
-  comandaEdit: ComandaModel,
-): ComandaEditActionsTypes {
-  return {
-    type: ComandaEditTypes.UPDATE_COMANDAEDIT_REQUEST,
-    payload: { comandaEdit },
-  };
-}
-
-export function deleteComandaEdit(
-  comandaEdit: ComandaModel,
-): ComandaEditActionsTypes {
-  return {
-    type: ComandaEditTypes.DELETE_COMANDAEDIT_REQUEST,
-    payload: { comandaEdit },
-  };
-}
-
-export function clearComandaEdit(
-  comandaEdit: ComandaModel,
-): ComandaEditActionsTypes {
-  return {
-    type: ComandaEditTypes.CLEAR_COMANDAEDIT_REQUEST,
-    payload: { comandaEdit },
-  };
-}
+import { ComandaEditTypes } from './types';
+export const createComandaEdit = (data: ComandaModel) => ({ type: ComandaEditTypes.CREATE, payload: data });
+export const updateComandaEdit = (data: ComandaModel) => ({ type: ComandaEditTypes.UPDATE, payload: data });
+export const deleteComandaEdit = () => ({ type: ComandaEditTypes.DELETE });
+export const clearComandaEdit  = () => ({ type: ComandaEditTypes.CLEAR });

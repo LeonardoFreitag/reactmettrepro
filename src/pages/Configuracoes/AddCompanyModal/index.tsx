@@ -1,145 +1,111 @@
-import { FormControl, Input, Modal, Button, Text } from 'native-base';
+import React from 'react';
+import { Modal, View, Text, StyleSheet, Alert } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
-import { yupResolver } from '@hookform/resolvers/yup';
-import * as yup from 'yup';
 import { useDispatch } from 'react-redux';
-import { CompanyModel } from '../../../models/CompanyModel';
-import { createCompanyList } from '../../../store/ducks/companyList/actions';
-import { companyCreate } from '../../../storage/company/companyCreate';
 import uuid from 'react-native-uuid';
+import { Input } from '../../../components/Input';
+import { Button } from '../../../components/Button';
+import { companyCreate } from '../../../storage/companyStorage';
+import { createCompanyList } from '../../../store/ducks/companyList/actions';
+import { CompanyModel } from '../../../models/CompanyModel';
+import { COLORS, FONT_FAMILY, FONT_SIZE } from '../../../theme';
+import { isIpAddress } from '../../../services/api';
 
-interface AddCompanyModalProps {
-  showModal: boolean;
-  handleCloseModal: () => void;
-}
+type FormData = { nome: string; ip: string; porta: string };
 
-const FormDataSchema = yup.object().shape({
-  nome: yup.string().required('Campo obrigatório'),
-  ip: yup.string().required('Campo obrigatório'),
-  porta: yup.string().required('Campo obrigatório'),
-});
+type Props = { isOpen: boolean; onClose: () => void };
 
-export function AddCompanyModal({
-  showModal,
-  handleCloseModal,
-}: AddCompanyModalProps) {
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-    control,
-  } = useForm({
-    resolver: yupResolver(FormDataSchema),
-    defaultValues: {
-      nome: '',
-      ip: '',
-      porta: '',
-    },
-  });
+export function AddCompanyModal({ isOpen, onClose }: Props) {
   const dispatch = useDispatch();
+  const { control, handleSubmit, reset, watch, formState: { errors }, setError } =
+    useForm<FormData>({ defaultValues: { nome: '', ip: '', porta: '' } });
 
-  const onSubmit = (data: any) => {
-    console.log(data);
-    const newCompany: CompanyModel = {
-      id: uuid.v4().toString(),
-      nome: data.nome,
-      ip: data.ip,
-      porta: data.porta,
+  const ipValue = watch('ip') ?? '';
+  const isIp = isIpAddress(ipValue);
+
+  async function onSubmit(data: FormData) {
+    if (!data.nome.trim()) {
+      setError('nome', { message: 'Nome obrigatório' });
+      return;
+    }
+    if (!data.ip.trim()) {
+      setError('ip', { message: 'IP ou domínio obrigatório' });
+      return;
+    }
+    if (isIpAddress(data.ip) && !data.porta.trim()) {
+      setError('porta', { message: 'Porta obrigatória para endereços IP' });
+      return;
+    }
+
+    const company: CompanyModel = {
+      id: uuid.v4() as string,
+      nome: data.nome.trim(),
+      ip: data.ip.trim(),
+      porta: data.porta?.trim() ?? '',
       isSelected: false,
     };
-    dispatch(createCompanyList(newCompany));
-    companyCreate(newCompany);
+    await companyCreate(company);
+    dispatch(createCompanyList(company));
     reset();
-    handleCloseModal();
-  };
-
-  const handleCancel = () => {
-    reset();
-    handleCloseModal();
-  };
+    onClose();
+  }
 
   return (
-    <Modal isOpen={showModal} onClose={() => handleCloseModal}>
-      <Modal.Content maxWidth="400px">
-        <Modal.Header>Adicionar conexão</Modal.Header>
-        <Modal.Body>
-          <FormControl isRequired>
-            <FormControl.Label>Nome</FormControl.Label>
-            <Controller
-              name="nome"
-              control={control}
-              render={({ field: { onChange, onBlur, value } }) => (
-                <Input
-                  placeholder="ex.: Empresa A"
-                  autoFocus
-                  onChangeText={onChange}
-                  onBlur={onBlur}
-                  value={value}
-                />
-              )}
+    <Modal visible={isOpen} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.overlay}>
+        <View style={styles.container}>
+          <Text style={styles.title}>Adicionar Empresa</Text>
+
+          <Controller control={control} name="nome" render={({ field: { onChange, value } }) => (
+            <Input placeholder="Nome da empresa" value={value} onChangeText={onChange} mb={3} />
+          )} />
+          {errors.nome && <Text style={styles.error}>{errors.nome.message}</Text>}
+
+          <Controller control={control} name="ip" render={({ field: { onChange, value } }) => (
+            <Input
+              placeholder="IP (192.168.1.1) ou domínio (api.empresa.com.br)"
+              value={value}
+              onChangeText={onChange}
+              keyboardType="numbers-and-punctuation"
+              autoCapitalize="none"
+              mb={3}
             />
-            {errors.nome && (
-              <Text fontSize="xs" color="red.400">
-                {errors.nome.message}
-              </Text>
-            )}
-          </FormControl>
-          <FormControl mt="3" isRequired>
-            <FormControl.Label>IP</FormControl.Label>
-            <Controller
-              name="ip"
-              control={control}
-              render={({ field: { onChange, onBlur, value } }) => (
+          )} />
+          {errors.ip && <Text style={styles.error}>{errors.ip.message}</Text>}
+
+          {isIp ? (
+            <>
+              <Controller control={control} name="porta" render={({ field: { onChange, value } }) => (
                 <Input
-                  placeholder="ex.: 192.168.0.100"
-                  keyboardType="number-pad"
-                  onChangeText={onChange}
-                  onBlur={onBlur}
+                  placeholder="Porta (ex: 3000)"
                   value={value}
-                />
-              )}
-            />
-            {errors.ip && (
-              <Text fontSize="xs" color="red.400">
-                {errors.ip.message}
-              </Text>
-            )}
-          </FormControl>
-          <FormControl mt="3" isRequired>
-            <FormControl.Label>Porta</FormControl.Label>
-            <Controller
-              name="porta"
-              control={control}
-              render={({ field: { onChange, onBlur, value } }) => (
-                <Input
-                  placeholder="ex.: 3000"
+                  onChangeText={onChange}
                   keyboardType="numeric"
-                  onChangeText={onChange}
-                  onBlur={onBlur}
-                  value={value}
+                  mb={4}
                 />
-              )}
-            />
-            {errors.porta && (
-              <Text fontSize="xs" color="red.400">
-                {errors.porta.message}
+              )} />
+              {errors.porta && <Text style={styles.error}>{errors.porta.message}</Text>}
+            </>
+          ) : (
+            ipValue.length > 0 && (
+              <Text style={styles.hint}>
+                Domínio detectado — porta não é necessária (HTTPS padrão)
               </Text>
-            )}
-          </FormControl>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button.Group space={2}>
-            <Button
-              variant="ghost"
-              colorScheme="blueGray"
-              onPress={handleCancel}>
-              Cancelar
-            </Button>
-            <Button onPress={handleSubmit(onSubmit)}>Salvar</Button>
-          </Button.Group>
-        </Modal.Footer>
-      </Modal.Content>
+            )
+          )}
+
+          <Button title="Salvar" onPress={handleSubmit(onSubmit)} mb={2} />
+          <Button title="Cancelar" variant="outline" onPress={onClose} />
+        </View>
+      </View>
     </Modal>
   );
 }
+
+const styles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: '#00000088', justifyContent: 'center', padding: 24 },
+  container: { backgroundColor: COLORS.SURFACE_800, borderRadius: 12, padding: 24 },
+  title: { color: COLORS.WHITE, fontSize: FONT_SIZE.LG, fontFamily: FONT_FAMILY.BOLD, marginBottom: 16 },
+  error: { color: COLORS.DANGER, fontSize: 12, marginTop: -8, marginBottom: 8 },
+  hint: { color: COLORS.CYAN_500, fontSize: FONT_SIZE.SM, marginBottom: 16 },
+});

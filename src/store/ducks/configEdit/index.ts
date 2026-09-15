@@ -1,35 +1,27 @@
-import { ConfigModel } from '../../../models/ConfigModel';
-import {
-  ConfigEditTypes,
-  ConfigEditState,
-  ConfigEditActionsTypes,
-} from './types';
+import { ConfigEditTypes, ConfigEditState } from './types';
 
 const INITIAL_STATE: ConfigEditState = {
-  data: {} as ConfigModel,
+  data: {
+    ip: '',
+    destino: false,
+    keyboardHasLetters: false,
+    cieloClientId: '',
+    cieloAccessToken: '',
+    cobrServico: 'N',
+    perServico: 0,
+  },
 };
 
-export default function ConfigEditReducer(
+export default function configEditReducer(
   state = INITIAL_STATE,
-  action: ConfigEditActionsTypes,
+  action: { type: ConfigEditTypes; payload?: any },
 ): ConfigEditState {
   switch (action.type) {
-    case ConfigEditTypes.CREATE_CONFIGEDIT_REQUEST:
-      return {
-        data: action.payload.configEdit,
-      };
-    case ConfigEditTypes.UPDATE_CONFIGEDIT_REQUEST: {
-      const data = action.payload.configEdit;
-      return { data };
-    }
-    case ConfigEditTypes.DELETE_CONFIGEDIT_REQUEST: {
-      const data = {} as ConfigModel;
-      return { data };
-    }
-    case ConfigEditTypes.CLEAR_CONFIGEDIT_REQUEST: {
-      const data = {} as ConfigModel;
-      return { data };
-    }
+    case ConfigEditTypes.CREATE:
+    case ConfigEditTypes.UPDATE:
+      return { data: action.payload };
+    case ConfigEditTypes.CLEAR:
+      return INITIAL_STATE;
     default:
       return state;
   }

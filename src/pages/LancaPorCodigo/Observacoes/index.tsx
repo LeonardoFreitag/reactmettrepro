@@ -1,189 +1,47 @@
-/* eslint-disable react-native/no-inline-styles */
-import { useNavigation } from '@react-navigation/native';
-import {
-  Box,
-  Button,
-  Center,
-  FlatList,
-  Flex,
-  Heading,
-  HStack,
-  Pressable,
-  Spacer,
-  Text,
-  VStack,
-} from 'native-base';
-import { useCallback, useState } from 'react';
-// import { Button } from '../../components/Button';
-import { Input } from '../../../components/Input';
+import React from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
 import { ObservacoesModel } from '../../../models/ObservacoesModel';
-import IconFeather from 'react-native-vector-icons/Feather';
-import { SafeAreaView } from 'react-native';
+import { COLORS, FONT_FAMILY, FONT_SIZE } from '../../../theme';
 
-const Observacoes: React.FC = () => {
-  const navigate = useNavigation();
-
-  const [obsList, setObsList] = useState<ObservacoesModel[]>([
-    {
-      codigo: '1',
-      observacao: 'Obs 1',
-      grupo: 'grupo geral',
-    },
-    {
-      codigo: '2',
-      observacao: 'Obs 2',
-      grupo: 'grupo geral',
-    },
-    {
-      codigo: '3',
-      observacao: 'Obs 3',
-      grupo: 'grupo geral',
-    },
-    {
-      codigo: '4',
-      observacao: 'Obs 4',
-      grupo: 'grupo geral',
-    },
-    {
-      codigo: '5',
-      observacao: 'Obs 5',
-      grupo: 'grupo geral',
-    },
-    {
-      codigo: '1',
-      observacao: 'Obs 1',
-      grupo: 'grupo geral',
-    },
-    {
-      codigo: '2',
-      observacao: 'Obs 2',
-      grupo: 'grupo geral',
-    },
-    {
-      codigo: '3',
-      observacao: 'Obs 3',
-      grupo: 'grupo geral',
-    },
-    {
-      codigo: '4',
-      observacao: 'Obs 4',
-      grupo: 'grupo geral',
-    },
-    {
-      codigo: '5',
-      observacao: 'Obs 5',
-      grupo: 'grupo geral',
-    },
-  ]);
-
-  const handleBack = () => {
-    navigate.navigate('lancaPorCodigo');
-  };
-
-  const handleContinue = () => {
-    navigate.navigate('atendimento');
-  };
-
-  return (
-    <SafeAreaView
-      style={{
-        flex: 1,
-        backgroundColor: '#121214',
-      }}>
-      <VStack
-        bg={'gray.800'}
-        flex={1}
-        justifyContent="space-between"
-        alignItems="center"
-        padding={4}>
-        <Heading color="white" mb={5}>
-          {'Comanda: 1'}
-        </Heading>
-        <Heading color="white" size="md">
-          {'Descrição do produto'}
-        </Heading>
-
-        <VStack flex={1} w="100%" mb={2} mt={2}>
-          <HStack w="100%" justifyContent="space-between" alignItems="center">
-            <VStack w="85%">
-              <Text color="white">Observacoes:</Text>
-              <Input />
-            </VStack>
-            <Button h={54}>
-              <IconFeather name="trash" size={20} color="#fff" />
-            </Button>
-          </HStack>
-          <FlatList
-            data={obsList}
-            numColumns={2}
-            renderItem={({ item }) => (
-              <Pressable mr={1} maxW="96" minW="49%" mb={1} key="item.id">
-                {({ isHovered, isPressed }) => {
-                  return (
-                    <Box
-                      bg={
-                        isPressed
-                          ? 'coolGray.200'
-                          : isHovered
-                          ? 'coolGray.200'
-                          : 'coolGray.100'
-                      }
-                      style={{
-                        transform: [
-                          {
-                            scale: isPressed ? 0.96 : 1,
-                          },
-                        ],
-                      }}
-                      p="1"
-                      rounded="8"
-                      shadow={3}
-                      borderWidth="1"
-                      borderColor="coolGray.300">
-                      <HStack alignItems="center">
-                        <Box
-                          colorScheme="darkBlue"
-                          variant="solid"
-                          rounded="4"
-                          padding="2">
-                          <Heading size="xs">{item.observacao}</Heading>
-                        </Box>
-                        <Spacer />
-                      </HStack>
-                    </Box>
-                  );
-                }}
-              </Pressable>
-            )}
-          />
-        </VStack>
-
-        <HStack w="100%" justifyContent="space-between">
-          <Button
-            variant="outline"
-            w="49%"
-            colorScheme="amber"
-            h={54}
-            fontFamily="heading"
-            fontSize="md"
-            onPress={handleBack}>
-            Voltar
-          </Button>
-          <Button
-            w="49%"
-            colorScheme="green"
-            h={54}
-            fontFamily="heading"
-            fontSize="md"
-            onPress={handleContinue}>
-            <Center>
-              <Text color="white">Confirmar</Text>
-            </Center>
-          </Button>
-        </HStack>
-      </VStack>
-    </SafeAreaView>
-  );
+type Props = {
+  observacoes: ObservacoesModel[];
+  selected: string[];
+  onToggle: (obs: ObservacoesModel) => void;
 };
 
-export default Observacoes;
+export function Observacoes({ observacoes, selected, onToggle }: Props) {
+  return (
+    <View>
+      <Text style={styles.label}>Observações</Text>
+      <FlatList
+        data={observacoes}
+        keyExtractor={item => item.codigo}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        renderItem={({ item }) => {
+          const isSelected = selected.includes(item.codigo);
+          return (
+            <TouchableOpacity
+              style={[styles.tag, isSelected && styles.tagSelected]}
+              onPress={() => onToggle(item)}
+            >
+              <Text style={[styles.tagText, isSelected && styles.tagTextSelected]}>
+                {item.observacao}
+              </Text>
+            </TouchableOpacity>
+          );
+        }}
+        ListEmptyComponent={<Text style={styles.empty}>Sem observações para este grupo</Text>}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  label: { color: COLORS.GRAY_200, fontSize: FONT_SIZE.SM, fontFamily: FONT_FAMILY.BOLD, marginBottom: 8 },
+  tag: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: COLORS.SURFACE_600, backgroundColor: COLORS.SURFACE_700, marginRight: 8 },
+  tagSelected: { borderColor: COLORS.CYAN_500, backgroundColor: `${COLORS.CYAN_500}22` },
+  tagText: { color: COLORS.GRAY_200, fontSize: FONT_SIZE.SM },
+  tagTextSelected: { color: COLORS.CYAN_500, fontFamily: FONT_FAMILY.BOLD },
+  empty: { color: COLORS.GRAY_400, fontSize: FONT_SIZE.SM },
+});

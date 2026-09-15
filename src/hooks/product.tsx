@@ -1,67 +1,36 @@
-import React, { createContext, useCallback, useState, useContext } from 'react';
+import React, { createContext, useContext, useState, ReactNode } from 'react';
 
-interface ProductSearchContextState {
+interface ProductSearchContextData {
   productCode: string;
-  productCodeTyping(codigo: string): void;
-  productCodeClear(): void;
+  productCodeTyping: (codigo: string) => void;
+  productCodeClear: () => void;
   obsFlavor: string;
-  obsFlavorTyping(obs: string): void;
-  obsFlavorClear(): void;
+  obsFlavorTyping: (obs: string) => void;
+  obsFlavorClear: () => void;
 }
 
-interface Props {
-  children: React.ReactNode;
-}
+const ProductSearchContext = createContext<ProductSearchContextData>({} as ProductSearchContextData);
 
-const ProductSearchContext = createContext<ProductSearchContextState>(
-  {} as ProductSearchContextState,
-);
-
-const ProductSearchProvider: React.FC<Props> = ({ children }: Props) => {
-  const [productCodeTyped, setProductCodeTyped] = useState<string>('');
-  const [obsTyped, setObsTyped] = useState<string>('');
-
-  const productCodeTyping = useCallback((codigo: string) => {
-    setProductCodeTyped(codigo);
-  }, []);
-
-  const productCodeClear = useCallback(() => {
-    setProductCodeTyped('');
-  }, []);
-
-  const obsFlavorTyping = useCallback((obs: string) => {
-    setObsTyped(obs);
-  }, []);
-
-  const obsFlavorClear = useCallback(() => {
-    setObsTyped('');
-  }, []);
+export function ProductSearchProvider({ children }: { children: ReactNode }) {
+  const [productCode, setProductCode] = useState('');
+  const [obsFlavor, setObsFlavor] = useState('');
 
   return (
     <ProductSearchContext.Provider
       value={{
-        productCode: productCodeTyped,
-        productCodeTyping,
-        productCodeClear,
-        obsFlavor: obsTyped,
-        obsFlavorTyping,
-        obsFlavorClear,
-      }}>
+        productCode,
+        productCodeTyping: setProductCode,
+        productCodeClear: () => setProductCode(''),
+        obsFlavor,
+        obsFlavorTyping: setObsFlavor,
+        obsFlavorClear: () => setObsFlavor(''),
+      }}
+    >
       {children}
     </ProductSearchContext.Provider>
   );
-};
-
-function useProductSearch(): ProductSearchContextState {
-  const context = useContext(ProductSearchContext);
-
-  if (!context) {
-    throw new Error(
-      'useProductSearch must be used within an ProductSearchProvider',
-    );
-  }
-
-  return context;
 }
 
-export { ProductSearchProvider, useProductSearch };
+export function useProductSearch() {
+  return useContext(ProductSearchContext);
+}

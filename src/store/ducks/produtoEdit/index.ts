@@ -1,35 +1,13 @@
-import { ProdutoModel } from '../../../models/ProdutoModel';
-import {
-  ProdutoEditTypes,
-  ProdutoEditState,
-  ProdutoEditActionsTypes,
-} from './types';
-
-const INITIAL_STATE: ProdutoEditState = {
-  data: {} as ProdutoModel,
-};
-
-export default function ProdutoEditReducer(
-  state = INITIAL_STATE,
-  action: ProdutoEditActionsTypes,
-): ProdutoEditState {
+import { ProdutoEditTypes, ProdutoEditState } from './types';
+const INITIAL_STATE: ProdutoEditState = { data: { codigo: '', nome: '', unidade: '', preco: 0, grupo: '', subgrupo: '', fracionado: '', impressao: '', selected: false } };
+export default function produtoEditReducer(state = INITIAL_STATE, action: { type: ProdutoEditTypes; payload?: any }): ProdutoEditState {
   switch (action.type) {
-    case ProdutoEditTypes.CREATE_PRODUTOEDIT_REQUEST:
-      return {
-        data: action.payload.produtoEdit,
-      };
-    case ProdutoEditTypes.UPDATE_PRODUTOEDIT_REQUEST: {
-      const data = action.payload.produtoEdit;
-      return { data };
-    }
-    case ProdutoEditTypes.DELETE_PRODUTOEDIT_REQUEST: {
-      const data = {} as ProdutoModel;
-      return { data };
-    }
-    case ProdutoEditTypes.CLEAR_PRODUTOEDIT_REQUEST: {
-      const data = {} as ProdutoModel;
-      return { data };
-    }
+    case ProdutoEditTypes.CREATE:
+    case ProdutoEditTypes.UPDATE:
+      return { data: action.payload };
+    case ProdutoEditTypes.DELETE:
+    case ProdutoEditTypes.CLEAR:
+      return INITIAL_STATE;
     default:
       return state;
   }

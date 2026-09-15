@@ -8,4 +8,5 @@ export interface ProdutoModel {
   fracionado: string;
   impressao: string;
   selected: boolean;
+  cobrarServico: string; // 'S' | 'N'
 }

@@ -1,47 +1,6 @@
 import { SubgrupoModel } from '../../../models/SubgrupoModel';
-import { SubgrupoListTypes, SubgrupoListActionsTypes } from './types';
-
-export function loadSubgrupoList(
-  subgrupoList: SubgrupoModel[],
-): SubgrupoListActionsTypes {
-  return {
-    type: SubgrupoListTypes.LOAD_SUBGRUPOLIST_REQUEST,
-    payload: { subgrupoList },
-  };
-}
-
-export function createSubgrupoList(
-  subgrupoList: SubgrupoModel,
-): SubgrupoListActionsTypes {
-  return {
-    type: SubgrupoListTypes.CREATE_SUBGRUPOLIST_REQUEST,
-    payload: { subgrupoList },
-  };
-}
-
-export function updateSubgrupoList(
-  subgrupoList: SubgrupoModel,
-): SubgrupoListActionsTypes {
-  return {
-    type: SubgrupoListTypes.UPDATE_SUBGRUPOLIST_REQUEST,
-    payload: { subgrupoList },
-  };
-}
-
-export function deleteSubgrupoList(
-  subgrupoList: SubgrupoModel,
-): SubgrupoListActionsTypes {
-  return {
-    type: SubgrupoListTypes.DELETE_SUBGRUPOLIST_REQUEST,
-    payload: { subgrupoList },
-  };
-}
-
-export function clearSubgrupoList(
-  subgrupoList: SubgrupoModel,
-): SubgrupoListActionsTypes {
-  return {
-    type: SubgrupoListTypes.CLEAR_SUBGRUPOLIST_REQUEST,
-    payload: { subgrupoList },
-  };
-}
+import { SubgrupoListTypes } from './types';
+export const loadSubgrupoList   = (data: SubgrupoModel[]) => ({ type: SubgrupoListTypes.LOAD,   payload: data });
+export const createSubgrupoList = (data: SubgrupoModel)   => ({ type: SubgrupoListTypes.CREATE, payload: data });
+export const deleteSubgrupoList = (nome: string)          => ({ type: SubgrupoListTypes.DELETE, payload: nome });
+export const clearSubgrupoList  = ()                      => ({ type: SubgrupoListTypes.CLEAR });

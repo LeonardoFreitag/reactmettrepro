@@ -1,42 +1,47 @@
+import React from 'react';
+import { FlatList } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
-import { RootState } from '../../store/ducks/combineReducers';
-import { Button, ButtonText, Container } from './styles';
-import { loadCompanyList } from '../../store/ducks/companyList/actions';
-import { CompanyModel } from '../../models/CompanyModel';
-import { companyUpdate } from '../../storage/company/companyUpdate';
+import { RootState } from '../../store/combineReducers';
 import { createCompanyEdit } from '../../store/ducks/companyEdit/actions';
+import { updateCompanyList } from '../../store/ducks/companyList/actions';
+import { companyUpdate } from '../../storage/companyStorage';
+import { CompanyModel } from '../../models/CompanyModel';
+import {
+  ItemContainer,
+  ItemText,
+  ListContainer,
+} from './styles';
 
 export function CompanyList() {
   const dispatch = useDispatch();
-  const companyList = useSelector((state: RootState) => state.companyList.data);
+  const companies = useSelector((state: RootState) => state.companyList.data);
+  const selected = useSelector((state: RootState) => state.companyEdit.data);
 
-  function handleSelectCompany(company: CompanyModel) {
-    companyUpdate(company);
-
-    const newCompanyList = companyList.map(item => {
-      return item.id === company.id
-        ? { ...company, isSelected: true }
-        : { ...item, isSelected: false };
-    });
-
-    dispatch(loadCompanyList(newCompanyList));
-    dispatch(createCompanyEdit(company));
+  async function handleSelect(company: CompanyModel) {
+    await companyUpdate(company);
+    const updated = companies.map(c => ({ ...c, isSelected: c.id === company.id }));
+    dispatch(updateCompanyList(updated));
+    dispatch(createCompanyEdit({ ...company, isSelected: true }));
   }
 
   return (
-    <Container>
-      {companyList.map((company, index) => {
-        return (
-          <Button
-            key={index.toString()}
-            isSelected={company.isSelected}
-            onPress={() => handleSelectCompany(company)}>
-            <ButtonText isSelected={company.isSelected}>
-              {company.nome}
-            </ButtonText>
-          </Button>
-        );
-      })}
-    </Container>
+    <ListContainer>
+      <FlatList
+        data={companies}
+        keyExtractor={item => item.id}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        renderItem={({ item }) => (
+          <ItemContainer
+            isSelected={item.id === selected.id}
+            onPress={() => handleSelect(item)}
+          >
+            <ItemText isSelected={item.id === selected.id}>
+              {item.nome}
+            </ItemText>
+          </ItemContainer>
+        )}
+      />
+    </ListContainer>
   );
 }

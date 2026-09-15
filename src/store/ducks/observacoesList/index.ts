@@ -1,46 +1,15 @@
-import { ObservacoesModel } from '../../../models/ObservacoesModel';
-import {
-  ObservacoesListTypes,
-  ObservacoesListState,
-  ObservacoesListActionsTypes,
-} from './types';
-
-const INITIAL_STATE: ObservacoesListState = {
-  data: [],
-};
-
-export default function ObservacoesListReducer(
-  state = INITIAL_STATE,
-  action: ObservacoesListActionsTypes,
-): ObservacoesListState {
+import { ObservacoesListTypes, ObservacoesListState } from './types';
+const INITIAL_STATE: ObservacoesListState = { data: [] };
+export default function observacoesListReducer(state = INITIAL_STATE, action: { type: ObservacoesListTypes; payload?: any }): ObservacoesListState {
   switch (action.type) {
-    case ObservacoesListTypes.LOAD_OBSERVACOESLIST_REQUEST:
-      return {
-        data: action.payload.observacoesList,
-      };
-    case ObservacoesListTypes.CREATE_OBSERVACOESLIST_REQUEST:
-      return {
-        data: [...state.data, action.payload.observacoesList],
-      };
-    case ObservacoesListTypes.UPDATE_OBSERVACOESLIST_REQUEST: {
-      const data = state.data.map(observacoes =>
-        observacoes.codigo === action.payload.observacoesList.codigo
-          ? action.payload.observacoesList
-          : observacoes,
-      );
-      return { data };
-    }
-    case ObservacoesListTypes.DELETE_OBSERVACOESLIST_REQUEST: {
-      const data = state.data.filter(
-        observacoes =>
-          observacoes.codigo !== action.payload.observacoesList.codigo,
-      );
-      return { data };
-    }
-    case ObservacoesListTypes.CLEAR_OBSERVACOESLIST_REQUEST: {
-      const data = [] as ObservacoesModel[];
-      return { data };
-    }
+    case ObservacoesListTypes.LOAD:
+      return { data: action.payload };
+    case ObservacoesListTypes.CREATE:
+      return { data: [...state.data, action.payload] };
+    case ObservacoesListTypes.DELETE:
+      return { data: state.data.filter(o => o.codigo !== action.payload) };
+    case ObservacoesListTypes.CLEAR:
+      return INITIAL_STATE;
     default:
       return state;
   }

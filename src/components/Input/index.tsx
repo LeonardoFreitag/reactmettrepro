@@ -1,23 +1,51 @@
-import { Input as NaviteBaseInput, IInputProps } from 'native-base';
+import React, { useState } from 'react';
+import { TextInput, TextInputProps, StyleSheet, View } from 'react-native';
+import { COLORS, FONT_FAMILY, FONT_SIZE } from '../../theme';
 
-export const Input: React.FC<IInputProps> = ({ ...rest }: IInputProps) => {
+type Props = TextInputProps & {
+  mb?: number;
+  mt?: number;
+  ml?: number;
+  mr?: number;
+};
+
+export function Input({ mb, mt, ml, mr, style, ...rest }: Props) {
+  const [focused, setFocused] = useState(false);
+
   return (
-    <NaviteBaseInput
-      bg="gray.900"
-      height={54}
-      px={4}
-      borderWidth={0}
-      fontSize="md"
-      color="white"
-      fontFamily="body"
-      mb={4}
-      placeholderTextColor="gray.600"
-      _focus={{
-        bg: 'gray.900',
-        borderWidth: 1,
-        borderColor: 'warning.400',
-      }}
+    <TextInput
       {...rest}
+      onFocus={e => { setFocused(true); rest.onFocus?.(e); }}
+      onBlur={e => { setFocused(false); rest.onBlur?.(e); }}
+      placeholderTextColor={COLORS.GRAY_400}
+      style={[
+        styles.input,
+        focused && styles.focused,
+        {
+          marginTop:    mt ? mt * 4 : undefined,
+          marginBottom: mb ? mb * 4 : undefined,
+          marginLeft:   ml ? ml * 4 : undefined,
+          marginRight:  mr ? mr * 4 : undefined,
+        },
+        style,
+      ]}
     />
   );
-};
+}
+
+const styles = StyleSheet.create({
+  input: {
+    height: 54,
+    backgroundColor: COLORS.SURFACE_700,
+    borderWidth: 1,
+    borderColor: COLORS.SURFACE_600,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    color: COLORS.WHITE,
+    fontFamily: FONT_FAMILY.REGULAR,
+    fontSize: FONT_SIZE.MD,
+  },
+  focused: {
+    borderColor: COLORS.GOLD_500,
+  },
+});

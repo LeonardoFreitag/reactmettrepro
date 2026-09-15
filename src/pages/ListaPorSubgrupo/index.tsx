@@ -1,249 +1,212 @@
-/* eslint-disable react-native/no-inline-styles */
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import {
-  Box,
-  Button,
-  Center,
-  FlatList,
-  Flex,
-  Heading,
-  HStack,
-  Pressable,
-  Spacer,
-  Text,
-  VStack,
-} from 'native-base';
-import { useCallback, useMemo } from 'react';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Feather } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
-import { GrupoModel } from '../../models/GrupoModel';
-import { SubgrupoModel } from '../../models/SubgrupoModel';
-import { RootState } from '../../store/ducks/combineReducers';
+import { RootState } from '../../store/combineReducers';
 import { createGrupoEdit } from '../../store/ducks/grupoEdit/actions';
-import { updateGrupoList } from '../../store/ducks/grupoList/actions';
 import { createSubgrupoEdit } from '../../store/ducks/subgrupoEdit/actions';
-import IconFeather from 'react-native-vector-icons/Feather';
-import { SafeAreaView } from 'react-native';
+import { GrupoModel } from '../../models/GrupoModel';
+import { AppStackParamList } from '../../routes';
+import { COLORS, FONT_FAMILY, FONT_SIZE } from '../../theme';
 
-const ListarPorSubgrupo: React.FC = () => {
+type Nav = NativeStackNavigationProp<AppStackParamList, 'listaPorSubgrupo'>;
+
+export function ListaPorSubgrupo() {
+  const navigation = useNavigation<Nav>();
   const dispatch = useDispatch();
-  const navigate = useNavigation();
-  const comandaEdit = useSelector((state: RootState) => state.comandaEdit.data);
   const grupoList = useSelector((state: RootState) => state.grupoList.data);
-  const grupoEdit = useSelector((state: RootState) => state.grupoEdit.data);
   const produtoList = useSelector((state: RootState) => state.produtoList.data);
+  const [selectedGrupo, setSelectedGrupo] = useState<GrupoModel | null>(null);
 
-  const subgroupFiltered = useMemo(() => {
-    const dataSubgroupFiltered: SubgrupoModel[] = [] as SubgrupoModel[];
-    const dataProd = produtoList.filter(opt => opt.grupo === grupoEdit.nome);
-    const subFromProducts: SubgrupoModel[] = dataProd.map(item => {
-      return {
-        nome: item.subgrupo,
-      };
-    });
-    subFromProducts.forEach(item => {
-      const dataIncludes = dataSubgroupFiltered.find(
-        opt => opt.nome === item.nome,
-      );
+  const grupos = grupoList.filter(g => g.combinado !== 'S');
 
-      if (!dataIncludes) {
-        dataSubgroupFiltered.push(item);
-      }
-    });
-    return dataSubgroupFiltered;
-  }, [grupoEdit.nome, produtoList]);
+  const subgrupos = selectedGrupo
+    ? [
+        ...new Set(
+          produtoList
+            .filter(p =>
+              p.grupo === selectedGrupo.codigo ||
+              p.grupo === selectedGrupo.nome
+            )
+            .map(p => p.subgrupo)
+        ),
+      ].filter(Boolean)
+    : [];
 
-  const handleBack = () => {
-    dispatch(
-      updateGrupoList({
-        ...grupoEdit,
-        selected: false,
-      }),
-    );
-    dispatch(createGrupoEdit({} as GrupoModel));
-    navigate.navigate('atendimento');
-  };
+  function handleSelectGrupo(grupo: GrupoModel) {
+    setSelectedGrupo(grupo);
+    dispatch(createGrupoEdit(grupo));
+  }
 
-  const handlePressGroup = (item: GrupoModel) => {
-    if (item.selected) {
-      dispatch(createGrupoEdit({} as GrupoModel));
-      dispatch(
-        updateGrupoList({
-          ...item,
-          selected: false,
-        }),
-      );
-    } else {
-      dispatch(
-        updateGrupoList({
-          ...grupoEdit,
-          selected: false,
-        }),
-      );
-      dispatch(createGrupoEdit(item));
-      dispatch(
-        updateGrupoList({
-          ...item,
-          selected: true,
-        }),
-      );
-    }
-  };
+  function handleSelectSubgrupo(subgrupo: string) {
+    dispatch(createSubgrupoEdit({ nome: subgrupo }));
+    navigation.navigate('produtosPorGrupo');
+  }
 
-  const handlePressSubgroup = (item: SubgrupoModel) => {
-    dispatch(createSubgrupoEdit(item));
-    navigate.navigate('produtosPorGrupo');
-  };
   return (
-    <SafeAreaView
-      style={{
-        flex: 1,
-        backgroundColor: '#121214',
-      }}>
-      <VStack
-        bg={'gray.800'}
-        flex={1}
-        justifyContent="space-between"
-        alignItems="center"
-        padding={4}>
-        <Heading color="white" mb={2}>
-          {`Comanda: ${comandaEdit.comanda}`}
-        </Heading>
-        <Heading color="white" size="sm">
-          {'Adicionar produto'}
-        </Heading>
-        <Flex flex={1} w="100%" mb={2} mt={2}>
-          <FlatList
-            data={grupoList}
-            numColumns={2}
-            renderItem={({ item }) => (
-              <Pressable
-                mr={1}
-                maxW="96"
-                minW="49%"
-                onPress={() => handlePressGroup(item)}
-                mb={1}
-                key="item.id">
-                {({ isHovered, isPressed }) => {
-                  return (
-                    <Box
-                      bg={
-                        isPressed
-                          ? 'coolGray.200'
-                          : isHovered
-                          ? 'coolGray.200'
-                          : 'coolGray.100'
-                      }
-                      style={{
-                        transform: [
-                          {
-                            scale: isPressed ? 0.96 : 1,
-                          },
-                        ],
-                      }}
-                      p="1"
-                      rounded="8"
-                      shadow={3}
-                      borderWidth="1"
-                      borderColor="coolGray.300"
-                      backgroundColor={
-                        item.selected ? 'darkBlue.300' : 'gray.100'
-                      }>
-                      <HStack alignItems="center">
-                        <Center
-                          // colorScheme="darkBlue"
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Feather name="arrow-left" size={24} color={COLORS.WHITE} />
+        </TouchableOpacity>
+        <Text style={styles.title}>Lista por grupo</Text>
+      </View>
 
-                          variant="solid"
-                          rounded="4"
-                          padding="2">
-                          <Heading size="xs">{`${item.nome}`}</Heading>
-                        </Center>
-                        <Spacer />
-                      </HStack>
-                    </Box>
-                  );
-                }}
-              </Pressable>
-            )}
-          />
-        </Flex>
-        <Flex flex={1} w="100%" mb={2} mt={2}>
-          <FlatList
-            data={subgroupFiltered}
-            numColumns={2}
-            renderItem={({ item }) => (
-              <Pressable
-                mr={1}
-                maxW="96"
-                minW="49%"
-                onPress={() => handlePressSubgroup(item)}
-                mb={1}
-                key="item.id">
-                {({ isHovered, isPressed }) => {
-                  return (
-                    <Box
-                      bg={
-                        isPressed
-                          ? 'coolGray.200'
-                          : isHovered
-                          ? 'coolGray.200'
-                          : 'coolGray.100'
-                      }
-                      style={{
-                        transform: [
-                          {
-                            scale: isPressed ? 0.96 : 1,
-                          },
-                        ],
-                      }}
-                      p="1"
-                      rounded="8"
-                      shadow={3}
-                      borderWidth="1"
-                      borderColor="coolGray.300">
-                      <HStack alignItems="center">
-                        <Box
-                          colorScheme="darkBlue"
-                          variant="solid"
-                          rounded="4"
-                          padding="2">
-                          <Heading size="xs">{item.nome}</Heading>
-                        </Box>
-                        <Spacer />
-                      </HStack>
-                    </Box>
-                  );
-                }}
-              </Pressable>
-            )}
-          />
-        </Flex>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <Text style={styles.sectionLabel}>Grupos</Text>
 
-        <HStack w="100%" justifyContent="space-between">
-          <Button
-            variant="outline"
-            w="49%"
-            colorScheme="amber"
-            h={54}
-            onPress={handleBack}>
-            <Center>
-              <IconFeather name="arrow-left" size={18} color="#d97706" />
-              <Text color="amber.600" fontSize="14px" fontWeight="bold">
-                Voltar
-              </Text>
-            </Center>
-          </Button>
-          <Button w="49%" colorScheme="green" h={54} onPress={handleBack}>
-            <Center>
-              <IconFeather name="thumbs-up" size={18} color="#fff" />
-              <Text color="white" fontSize="14px">
-                Conferir e enviar
-              </Text>
-            </Center>
-          </Button>
-        </HStack>
-      </VStack>
-    </SafeAreaView>
+        {grupos.length === 0 ? (
+          <Text style={styles.empty}>Nenhum grupo disponível</Text>
+        ) : (
+          <View style={styles.grid}>
+            {grupos.map(item => (
+              <TouchableOpacity
+                key={item.codigo}
+                style={[
+                  styles.card,
+                  selectedGrupo?.codigo === item.codigo && styles.cardSelected,
+                ]}
+                onPress={() => handleSelectGrupo(item)}
+              >
+                <Text
+                  style={[
+                    styles.cardText,
+                    selectedGrupo?.codigo === item.codigo && styles.cardTextSelected,
+                  ]}
+                >
+                  {item.nome}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {selectedGrupo && (
+          <>
+            <Text style={styles.sectionLabel}>
+              Subgrupos de {selectedGrupo.nome}
+            </Text>
+
+            {subgrupos.length === 0 ? (
+              <TouchableOpacity
+                style={styles.subCardSingle}
+                onPress={() => {
+                  dispatch(createSubgrupoEdit({ nome: '' }));
+                  navigation.navigate('produtosPorGrupo');
+                }}
+              >
+                <Text style={styles.subCardText}>Ver todos os produtos</Text>
+                <Feather name="chevron-right" size={16} color={COLORS.CYAN_500} />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.grid}>
+                {subgrupos.map(item => (
+                  <TouchableOpacity
+                    key={item}
+                    style={styles.subCard}
+                    onPress={() => handleSelectSubgrupo(item)}
+                  >
+                    <Text style={styles.subCardText}>{item}</Text>
+                    <Feather name="chevron-right" size={16} color={COLORS.CYAN_500} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </>
+        )}
+      </ScrollView>
+    </View>
   );
-};
+}
 
-export default ListarPorSubgrupo;
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.BACKGROUND,
+    padding: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingTop: 40,
+    marginBottom: 16,
+  },
+  title: {
+    color: COLORS.WHITE,
+    fontSize: FONT_SIZE.LG,
+    fontFamily: FONT_FAMILY.BOLD,
+  },
+  sectionLabel: {
+    color: COLORS.GRAY_200,
+    fontSize: FONT_SIZE.SM,
+    fontFamily: FONT_FAMILY.BOLD,
+    marginBottom: 8,
+    marginTop: 8,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  card: {
+    width: '48.5%',
+    backgroundColor: COLORS.SURFACE_800,
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: COLORS.SURFACE_600,
+    marginBottom: 8,
+  },
+  cardSelected: {
+    borderColor: COLORS.GOLD_500,
+    backgroundColor: `${COLORS.GOLD_500}22`,
+  },
+  cardText: {
+    color: COLORS.GRAY_100,
+    fontFamily: FONT_FAMILY.REGULAR,
+    fontSize: FONT_SIZE.SM,
+    textAlign: 'center',
+  },
+  cardTextSelected: {
+    color: COLORS.GOLD_500,
+    fontFamily: FONT_FAMILY.BOLD,
+  },
+  subCard: {
+    width: '48.5%',
+    backgroundColor: COLORS.SURFACE_700,
+    borderRadius: 8,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: COLORS.CYAN_500,
+    marginBottom: 8,
+  },
+  subCardSingle: {
+    backgroundColor: COLORS.SURFACE_700,
+    borderRadius: 8,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: COLORS.CYAN_500,
+    marginBottom: 8,
+  },
+  subCardText: {
+    color: COLORS.CYAN_500,
+    fontFamily: FONT_FAMILY.BOLD,
+    fontSize: FONT_SIZE.SM,
+    flex: 1,
+  },
+  empty: {
+    color: COLORS.GRAY_400,
+    textAlign: 'center',
+    marginTop: 32,
+  },
+});

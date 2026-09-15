@@ -1,255 +1,198 @@
+import React, { useEffect, useState } from 'react';
+import { Alert, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { Box, VStack, useToast, Text } from 'native-base';
-import { useCallback, useEffect, useState } from 'react';
-import { Button } from '../../components/Button';
-import { Input } from '../../components/Input';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Feather } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
-import { createConfigEdit } from '../../store/ducks/configEdit/actions';
-import { setUtl } from '../../services/api';
-import { RootState } from '../../store/ducks/combineReducers';
-import { AtendenteModel } from '../../models/AtendenteModel';
-import { loadAtendenteList } from '../../store/ducks/atendenteList/actions';
+
+import { AppStackParamList } from '../../routes';
+import { RootState } from '../../store/combineReducers';
 import { createAtendenteEdit } from '../../store/ducks/atendenteEdit/actions';
-import { UserIsloggedModel } from '../../models/UserIsLoggedModel';
-import { Logo } from './styles';
-import { companyGetAll } from '../../storage/company/companyGetAll';
 import { loadCompanyList } from '../../store/ducks/companyList/actions';
-import { CompanyList } from '../../components/CompanyList';
 import { createCompanyEdit } from '../../store/ducks/companyEdit/actions';
+import { setUrl } from '../../services/api';
+import { companyGetAll } from '../../storage/companyStorage';
+import { userLoggedSave, userLoggedGet, configGet, configSave } from '../../storage/configStorage';
+import { updateConfigEdit } from '../../store/ducks/configEdit/actions';
+import { AtendenteModel } from '../../models/AtendenteModel';
 
-const SignIn: React.FC = () => {
+import { Input } from '../../components/Input';
+import { Button } from '../../components/Button';
+import { CompanyList } from '../../components/CompanyList';
+import {
+  Container,
+  LogoContainer,
+  AppName,
+  AppSubtitle,
+  FormGroup,
+  Label,
+  SettingsButton,
+  SettingsText,
+} from './styles';
+import { COLORS } from '../../theme';
+
+type Nav = NativeStackNavigationProp<AppStackParamList, 'signin'>;
+
+export function SignIn() {
+  const navigation = useNavigation<Nav>();
   const dispatch = useDispatch();
-  const navigate = useNavigation();
-  const toast = useToast();
-  const [codigo, setCodigo] = useState('');
-  const [password, setPassword] = useState('');
-  const atendenteList = useSelector(
-    (state: RootState) => state.atendenteList.data,
-  );
-  const configEdit = useSelector((state: RootState) => state.configEdit.data);
-  const companyList = useSelector((state: RootState) => state.companyList.data);
   const companyEdit = useSelector((state: RootState) => state.companyEdit.data);
+  const configEdit = useSelector((state: RootState) => state.configEdit.data);
 
-  const handleLogin = async () => {
-    if (configEdit === null) {
-      toast.show({
-        description: 'Faça as configurações do aplicativo!',
-        duration: 1000,
-      });
-      return;
-    }
-
-    if (codigo === '' || password === '') {
-      toast.show({
-        description: 'Ops! Você precisa digitar um código e uma senha válidos!',
-        duration: 1000,
-      });
-      return;
-    }
-
-    let listFromApi: AtendenteModel[] = [] as AtendenteModel[];
-
-    if (atendenteList.length === 0) {
-      const api = setUtl(companyEdit.ip, companyEdit.porta);
-
-      api
-        .get<AtendenteModel[]>('/func')
-        .then(async response => {
-          const dataFuncionarios: AtendenteModel[] = response.data;
-          dispatch(loadAtendenteList(dataFuncionarios));
-          listFromApi = dataFuncionarios;
-          const dataCheck = listFromApi.filter(
-            opt => opt.codigo === codigo && opt.senha === password,
-          );
-
-          const isUserLogged = await AsyncStorage.getItem('@mettre_userlogged');
-          if (isUserLogged !== null) {
-            const stringConvertedData: UserIsloggedModel =
-              JSON.parse(isUserLogged);
-            const dataUser: AtendenteModel = {
-              codigo: stringConvertedData.codigo,
-              nome: stringConvertedData.nome,
-              senha: stringConvertedData.senha,
-            };
-            dispatch(createAtendenteEdit(dataUser));
-            navigate.navigate('comandas');
-          }
-
-          if (dataCheck.length === 0) {
-            toast.show({
-              description: 'Código ou senha inválidos!',
-              duration: 1000,
-            });
-            return;
-          }
-
-          const atendenteLogado: AtendenteModel = dataCheck.find(
-            opt => opt.codigo === codigo && opt.senha === password,
-          ) as AtendenteModel;
-
-          if (!atendenteLogado) {
-            dispatch(createAtendenteEdit(atendenteLogado));
-            toast.show({
-              description: 'Código ou senha inválidos!',
-              duration: 1000,
-            });
-            return;
-          }
-
-          dispatch(createAtendenteEdit(atendenteLogado));
-
-          try {
-            const userLogged: UserIsloggedModel = {
-              codigo: atendenteLogado.codigo,
-              nome: atendenteLogado.nome,
-              senha: atendenteLogado.senha,
-              isLogged: true,
-            };
-            const jsonValue = JSON.stringify(userLogged);
-            await AsyncStorage.setItem('@mettre_userlogged', jsonValue);
-          } catch (e) {
-            toast.show({
-              description: 'Erro ao memorizar atendente logado!',
-              duration: 1000,
-            });
-          }
-
-          navigate.navigate('comandas');
-        })
-        .catch(() => {
-          toast.show({
-            description: 'Sem comunicação com API',
-            duration: 1000,
-          });
-        });
-    } else {
-      listFromApi = atendenteList;
-      const dataCheck = listFromApi.filter(
-        opt => opt.codigo === codigo && opt.senha === password,
-      );
-
-      const isUserLogged = await AsyncStorage.getItem('@mettre_userlogged');
-      if (isUserLogged !== null) {
-        const stringConvertedData: UserIsloggedModel = JSON.parse(isUserLogged);
-        const dataUser: AtendenteModel = {
-          codigo: stringConvertedData.codigo,
-          nome: stringConvertedData.nome,
-          senha: stringConvertedData.senha,
-        };
-        dispatch(createAtendenteEdit(dataUser));
-        navigate.navigate('comandas');
-      }
-
-      if (dataCheck.length === 0) {
-        toast.show({
-          description: 'Código ou senha inválidos!',
-          duration: 1000,
-        });
-        return;
-      }
-
-      const atendenteLogado: AtendenteModel = dataCheck.find(
-        opt => opt.codigo === codigo && opt.senha === password,
-      ) as AtendenteModel;
-
-      if (!atendenteLogado) {
-        dispatch(createAtendenteEdit(atendenteLogado));
-        toast.show({
-          description: 'Código ou senha inválidos!',
-          duration: 1000,
-        });
-        return;
-      }
-
-      dispatch(createAtendenteEdit(atendenteLogado));
-
-      try {
-        const userLogged: UserIsloggedModel = {
-          codigo: atendenteLogado.codigo,
-          nome: atendenteLogado.nome,
-          senha: atendenteLogado.senha,
-          isLogged: true,
-        };
-        const jsonValue = JSON.stringify(userLogged);
-        await AsyncStorage.setItem('@mettre_userlogged', jsonValue);
-      } catch (e) {
-        toast.show({
-          description: 'Erro ao memorizar atendente logado!',
-          duration: 1000,
-        });
-      }
-
-      navigate.navigate('comandas');
-    }
-    // }
-  };
-
-  const handleConfig = () => {
-    navigate.navigate('configuracoes');
-  };
-
-  const handleLoadCompanyList = useCallback(async () => {
-    const jsonValue = await companyGetAll();
-    if (jsonValue.length === 0) {
-      toast.show({
-        description: 'Cadastre uma empresa!',
-        duration: 1000,
-      });
-      return;
-    }
-    dispatch(loadCompanyList(jsonValue));
-    const activeCompany = jsonValue.find(opt => opt.isSelected === true);
-    if (!activeCompany) {
-      return;
-    }
-    dispatch(createCompanyEdit(activeCompany));
-  }, [dispatch]);
-
-  const handleLoadConfig = useCallback(async () => {
-    const jsonValue = await AsyncStorage.getItem('@mettre_config');
-    if (jsonValue !== null) {
-      const data = JSON.parse(jsonValue);
-      dispatch(createConfigEdit(data));
-    }
-  }, [dispatch]);
+  const [codigo, setCodigo] = useState('');
+  const [senha, setSenha] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    handleLoadCompanyList();
-    handleLoadConfig();
-  }, [dispatch, handleLoadCompanyList, handleLoadConfig]);
+    loadCompanies();
+  }, []);
+
+  async function loadCompanies() {
+    const companies = await companyGetAll();
+    dispatch(loadCompanyList(companies));
+    const selected = companies.find(c => c.isSelected) ?? companies[0];
+    if (selected) {
+      dispatch(createCompanyEdit(selected));
+      // Carrega credenciais Cielo e demais configs do servidor
+      fetchServerConfig(selected.ip, selected.porta);
+    }
+
+    const userLogged = await userLoggedGet();
+    if (userLogged?.isLogged) {
+      dispatch(createAtendenteEdit({
+        codigo: userLogged.codigo,
+        nome: userLogged.nome,
+        senha: userLogged.senha,
+      }));
+      navigation.navigate('comandas');
+    }
+  }
+
+  async function fetchServerConfig(ip: string, porta?: string) {
+    try {
+      const api = setUrl(ip, porta);
+      const { data } = await api.get<{
+        vLimitePedacos: number | null;
+        cieloClientId: string;
+        cieloAccessToken: string;
+        cobrServico: string;
+        perServico: number;
+      }>('/config');
+
+      // Merge com config local (preserva ip, destino, keyboardHasLetters)
+      const stored = await configGet();
+      const updated = {
+        ip: stored?.ip ?? ip,
+        destino: stored?.destino ?? false,
+        keyboardHasLetters: stored?.keyboardHasLetters ?? false,
+        cieloClientId:    data.cieloClientId    ?? stored?.cieloClientId    ?? '',
+        cieloAccessToken: data.cieloAccessToken ?? stored?.cieloAccessToken ?? '',
+        cobrServico:      data.cobrServico      ?? stored?.cobrServico      ?? 'N',
+        perServico:       data.perServico        ?? stored?.perServico       ?? 0,
+      };
+      dispatch(updateConfigEdit(updated));
+      await configSave(updated);
+    } catch {
+      // Falha silenciosa — credenciais salvas localmente continuam válidas
+    }
+  }
+
+  async function handleSignIn() {
+    if (!codigo.trim()) {
+      return Alert.alert('Atenção', 'Informe o código do funcionário.');
+    }
+    if (!senha.trim()) {
+      return Alert.alert('Atenção', 'Informe a senha.');
+    }
+    if (!companyEdit.ip) {
+      return Alert.alert('Atenção', 'Selecione uma empresa.');
+    }
+
+    setLoading(true);
+    try {
+      const api = setUrl(companyEdit.ip, companyEdit.porta);
+      const { data } = await api.get<AtendenteModel[]>('/func');
+
+      const atendente = data.find(
+        f => f.codigo.trim() === codigo.trim() && f.senha.trim() === senha.trim()
+      );
+
+      if (!atendente) {
+        return Alert.alert('Erro', 'Código ou senha inválidos.');
+      }
+
+      await userLoggedSave({ ...atendente, isLogged: true });
+      dispatch(createAtendenteEdit(atendente));
+      navigation.navigate('comandas');
+    } catch (err: any) {
+      const url = `http://${companyEdit.ip}:${companyEdit.porta}/func`;
+      const detail = err?.message ?? err?.code ?? 'Erro desconhecido';
+      const status = err?.response?.status;
+      const msg = status
+        ? `Servidor retornou erro ${status}.\n\n${detail}`
+        : `Não foi possível conectar.\n\nURL: ${url}\n\nDetalhe: ${detail}`;
+      Alert.alert('Erro de conexão', msg);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
-    <VStack
-      bg={'gray.800'}
-      flex={1}
-      justifyContent="center"
-      alignItems="center"
-      padding={4}>
-      <Box mb={8}>
-        <Logo source={require('../../assets/Logo.png')} />
-      </Box>
-      {companyList.length > 0 && <CompanyList />}
-      <Input
-        placeholder="Código..."
-        keyboardType="number-pad"
-        onChangeText={setCodigo}
-      />
-      <Input
-        placeholder="Senha..."
-        keyboardType="number-pad"
-        secureTextEntry
-        onChangeText={setPassword}
-      />
-      <Button title="Acessar" onPress={handleLogin} />
-      <Button
-        title="Configurar"
-        variant="outline"
-        mt={24}
-        onPress={handleConfig}
-      />
-    </VStack>
-  );
-};
+    <Container>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <LogoContainer>
+            <AppName>ReactMettre</AppName>
+            <AppSubtitle>Sistema de Ponto de Venda</AppSubtitle>
+          </LogoContainer>
 
-export default SignIn;
+          <SettingsButton onPress={() => navigation.navigate('configuracoes')}>
+            <Feather name="settings" size={16} color={COLORS.CYAN_500} />
+            <SettingsText>Configurações</SettingsText>
+          </SettingsButton>
+
+          <FormGroup>
+            <Label>Empresa</Label>
+            <CompanyList />
+          </FormGroup>
+
+          <FormGroup>
+            <Label>Código do funcionário</Label>
+            <Input
+              placeholder="Digite o código"
+              keyboardType={configEdit.keyboardHasLetters ? 'default' : 'numeric'}
+              value={codigo}
+              onChangeText={setCodigo}
+              autoCapitalize="none"
+            />
+          </FormGroup>
+
+          <FormGroup>
+            <Label>Senha</Label>
+            <Input
+              placeholder="Digite a senha"
+              keyboardType={configEdit.keyboardHasLetters ? 'default' : 'numeric'}
+              secureTextEntry
+              value={senha}
+              onChangeText={setSenha}
+            />
+          </FormGroup>
+
+          <Button
+            title={loading ? 'Entrando...' : 'Entrar'}
+            onPress={handleSignIn}
+            isDisabled={loading}
+            mt={4}
+          />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </Container>
+  );
+}

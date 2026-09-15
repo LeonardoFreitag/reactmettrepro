@@ -1,13 +1,6 @@
-import React from 'react';
-
+import React, { ReactNode } from 'react';
 import { ProductSearchProvider } from './product';
 
-interface Props {
-  children: React.ReactNode;
+export function AppProvider({ children }: { children: ReactNode }) {
+  return <ProductSearchProvider>{children}</ProductSearchProvider>;
 }
-
-const AppProvider: React.FC<Props> = ({ children }: Props) => (
-  <ProductSearchProvider>{children}</ProductSearchProvider>
-);
-
-export default AppProvider;

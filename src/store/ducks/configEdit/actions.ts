@@ -1,38 +1,5 @@
 import { ConfigModel } from '../../../models/ConfigModel';
-import { ConfigEditTypes, ConfigEditActionsTypes } from './types';
-
-export function createConfigEdit(
-  configEdit: ConfigModel,
-): ConfigEditActionsTypes {
-  return {
-    type: ConfigEditTypes.CREATE_CONFIGEDIT_REQUEST,
-    payload: { configEdit },
-  };
-}
-
-export function updateConfigEdit(
-  configEdit: ConfigModel,
-): ConfigEditActionsTypes {
-  return {
-    type: ConfigEditTypes.UPDATE_CONFIGEDIT_REQUEST,
-    payload: { configEdit },
-  };
-}
-
-export function deleteConfigEdit(
-  configEdit: ConfigModel,
-): ConfigEditActionsTypes {
-  return {
-    type: ConfigEditTypes.DELETE_CONFIGEDIT_REQUEST,
-    payload: { configEdit },
-  };
-}
-
-export function clearConfigEdit(
-  configEdit: ConfigModel,
-): ConfigEditActionsTypes {
-  return {
-    type: ConfigEditTypes.CLEAR_CONFIGEDIT_REQUEST,
-    payload: { configEdit },
-  };
-}
+import { ConfigEditTypes } from './types';
+export const createConfigEdit = (data: ConfigModel) => ({ type: ConfigEditTypes.CREATE, payload: data });
+export const updateConfigEdit = (data: ConfigModel) => ({ type: ConfigEditTypes.UPDATE, payload: data });
+export const clearConfigEdit  = ()                  => ({ type: ConfigEditTypes.CLEAR });

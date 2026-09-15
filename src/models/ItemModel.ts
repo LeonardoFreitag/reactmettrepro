@@ -19,4 +19,5 @@ export interface ItemModel {
   codCombinado: string;
   flavors: ItemModel[];
   repeat: boolean;
+  servico?: number; // taxa de serviço calculada localmente (itens pendentes)
 }

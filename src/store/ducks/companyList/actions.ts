@@ -1,47 +1,7 @@
 import { CompanyModel } from '../../../models/CompanyModel';
-import { CompanyListTypes, CompanyListActionsTypes } from './types';
-
-export function loadCompanyList(
-  companyList: CompanyModel[],
-): CompanyListActionsTypes {
-  return {
-    type: CompanyListTypes.LOAD_COMPANYLIST_REQUEST,
-    payload: { companyList },
-  };
-}
-
-export function createCompanyList(
-  companyList: CompanyModel,
-): CompanyListActionsTypes {
-  return {
-    type: CompanyListTypes.CREATE_COMPANYLIST_REQUEST,
-    payload: { companyList },
-  };
-}
-
-export function updateCompanyList(
-  companyList: CompanyModel,
-): CompanyListActionsTypes {
-  return {
-    type: CompanyListTypes.UPDATE_COMPANYLIST_REQUEST,
-    payload: { companyList },
-  };
-}
-
-export function deleteCompanyList(
-  companyList: CompanyModel,
-): CompanyListActionsTypes {
-  return {
-    type: CompanyListTypes.DELETE_COMPANYLIST_REQUEST,
-    payload: { companyList },
-  };
-}
-
-export function clearCompanyList(
-  companyList: CompanyModel,
-): CompanyListActionsTypes {
-  return {
-    type: CompanyListTypes.CLEAR_COMPANYLIST_REQUEST,
-    payload: { companyList },
-  };
-}
+import { CompanyListTypes } from './types';
+export const loadCompanyList   = (data: CompanyModel[]) => ({ type: CompanyListTypes.LOAD,   payload: data });
+export const createCompanyList = (data: CompanyModel)   => ({ type: CompanyListTypes.CREATE, payload: data });
+export const updateCompanyList = (data: CompanyModel[]) => ({ type: CompanyListTypes.UPDATE, payload: data });
+export const deleteCompanyList = (id: string)           => ({ type: CompanyListTypes.DELETE, payload: id });
+export const clearCompanyList  = ()                     => ({ type: CompanyListTypes.CLEAR });

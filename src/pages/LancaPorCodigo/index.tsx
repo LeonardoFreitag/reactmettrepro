@@ -1,383 +1,260 @@
-/* eslint-disable react-native/no-inline-styles */
-import { useNavigation } from '@react-navigation/native';
-import {
-  Button,
-  Center,
-  FlatList,
-  Heading,
-  HStack,
-  Input,
-  Text,
-  VStack,
-  Button as NativeButton,
-  Box,
-  Pressable,
-  Spacer,
-  useToast,
-  Flex,
-} from 'native-base';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Feather } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
-import { NumberSpinner } from '../../components/NumberSpinner';
-import { RootState } from '../../store/ducks/combineReducers';
-import { formatDecimal } from '../../utils/formatDecimal';
-import IconFeather from 'react-native-vector-icons/Feather';
-import { ObservacoesModel } from '../../models/ObservacoesModel';
-import {
-  createItemList,
-  updateItemList,
-} from '../../store/ducks/itemList/actions';
-import { ItemModel } from '../../models/ItemModel';
-import { useProductSearch } from '../../hooks/product';
 import uuid from 'react-native-uuid';
-import { createItemEdit } from '../../store/ducks/itemEdit/actions';
-import { SafeAreaView } from 'react-native';
+import { RootState } from '../../store/combineReducers';
+import { createItemList, updateItemList } from '../../store/ducks/itemList/actions';
+import { clearItemEdit } from '../../store/ducks/itemEdit/actions';
+import { clearProdutoEdit } from '../../store/ducks/produtoEdit/actions';
+import { ProdutoModel } from '../../models/ProdutoModel';
+import { ItemModel } from '../../models/ItemModel';
+import { ObservacoesModel } from '../../models/ObservacoesModel';
+import { Input } from '../../components/Input';
+import { Button } from '../../components/Button';
+import { NumberSpinner } from '../../components/NumberSpinner';
+import { Observacoes } from './Observacoes';
+import { AppStackParamList } from '../../routes';
+import { COLORS, FONT_FAMILY, FONT_SIZE } from '../../theme';
 
-const LancaPorCodigo: React.FC = () => {
-  const navigate = useNavigation();
-  const toast = useToast();
+type Nav = NativeStackNavigationProp<AppStackParamList, 'lancaPorCodigo'>;
+
+export function LancaPorCodigo() {
+  const navigation = useNavigation<Nav>();
   const dispatch = useDispatch();
-  const { productCode, productCodeTyping, productCodeClear } =
-    useProductSearch();
-  const configEdit = useSelector((state: RootState) => state.configEdit.data);
-  const comandaEdit = useSelector((state: RootState) => state.comandaEdit.data);
-  const [amount, setAmount] = useState('1');
-  // const [codeProductTyped, setCodeProductTyped] = useState('');
-  const observacoesList = useSelector(
-    (state: RootState) => state.observacoesList.data,
-  );
-  const produtoList = useSelector((state: RootState) => state.produtoList.data);
-  const itemEdit = useSelector((state: RootState) => state.itemEdit.data);
-  const atendenteEdit = useSelector(
-    (state: RootState) => state.atendenteEdit.data,
-  );
-  const [selectedObs, setSelectedObs] = useState('');
+  const produtoList    = useSelector((state: RootState) => state.produtoList.data);
+  const produtoEdit    = useSelector((state: RootState) => state.produtoEdit.data);
+  const observacoesList = useSelector((state: RootState) => state.observacoesList.data);
+  const itemEdit       = useSelector((state: RootState) => state.itemEdit.data);
+  const comandaEdit    = useSelector((state: RootState) => state.comandaEdit.data);
+  const atendenteEdit  = useSelector((state: RootState) => state.atendenteEdit.data);
+  const configEdit     = useSelector((state: RootState) => state.configEdit.data);
 
+  const isEditing = !!itemEdit.mobileId;
+
+  const [codigo, setCodigo] = useState('');
+  const [amount, setAmount] = useState(1);
+  const [obsText, setObsText] = useState('');
+  const [foundProduct, setFoundProduct] = useState<ProdutoModel | null>(null);
+
+  // Inicialização: apenas no modo edição
   useEffect(() => {
-    if (itemEdit) {
-      productCodeTyping(itemEdit.produtoCodigo);
-      setSelectedObs(itemEdit.obs);
+    if (isEditing) {
+      const prod = produtoList.find(p => p.codigo === itemEdit.produtoCodigo);
+      if (prod) setFoundProduct(prod);
+      setAmount(itemEdit.quantidade);
+      setCodigo(itemEdit.produtoCodigo);
+      setObsText(itemEdit.obs ?? '');
     }
-  }, [itemEdit, productCodeTyping]);
+    // Limpeza ao desmontar
+    return () => {
+      dispatch(clearItemEdit());
+      dispatch(clearProdutoEdit());
+    };
+  }, []);
 
-  const productFounded = useMemo(() => {
-    return produtoList.find(opt => opt.codigo === productCode);
-  }, [productCode, produtoList]);
+  // Captura produto vindo do SearchProduct quando a tela ganha foco
+  useFocusEffect(
+    useCallback(() => {
+      if (!isEditing && produtoEdit.codigo) {
+        setFoundProduct(produtoEdit);
+        setCodigo(produtoEdit.codigo);
+      }
+    }, [produtoEdit.codigo])
+  );
 
-  const obsPorGrupo = useMemo(() => {
-    if (!productFounded) {
-      return observacoesList;
-    }
+  function handleSearch() {
+    const term = codigo.trim();
+    if (!term) return Alert.alert('Aviso', 'Digite um código para buscar.');
 
-    const data = observacoesList.filter(
-      opt => opt.grupo === productFounded.grupo,
+    const found = produtoList.find(p =>
+      p.codigo.trim() === term ||
+      p.codigo.trim().toLowerCase() === term.toLowerCase() ||
+      p.codigo.replace(/^0+/, '') === term.replace(/^0+/, '')
     );
-    return data;
-  }, [observacoesList, productFounded]);
 
-  const handleBack = () => {
-    if (itemEdit) {
-      dispatch(createItemEdit({} as ItemModel));
+    if (!found) return Alert.alert('Aviso', `Produto com código "${term}" não encontrado.`);
+    setFoundProduct(found);
+  }
+
+  function handleToggleObs(obs: ObservacoesModel) {
+    setObsText(prev => {
+      const trimmed = prev.trim();
+      return trimmed ? `${trimmed}, ${obs.observacao}` : obs.observacao;
+    });
+  }
+
+  function calcServico(itemTotal: number, produto: ProdutoModel): number {
+    if (configEdit.cobrServico?.trim() === 'S' && produto.cobrarServico?.trim() === 'S') {
+      return Math.round(itemTotal * (configEdit.perServico / 100) * 100) / 100;
     }
-    navigate.navigate('atendimento');
-  };
+    return 0;
+  }
 
-  const handleContinue = () => {
-    // adiciona o item na listagem
-    if (!productFounded) {
-      toast.show({
-        description: 'Nenhum produto selecionado!',
-        duration: 1000,
-      });
-      return;
-    }
+  function handleConfirm() {
+    if (!foundProduct) return Alert.alert('Aviso', 'Selecione um produto.');
+    if (amount <= 0)    return Alert.alert('Aviso', 'Quantidade inválida.');
 
-    if (itemEdit?.codigo) {
-      const newItem: ItemModel = {
+    const itemTotal = amount * foundProduct.preco;
+    const servico   = calcServico(itemTotal, foundProduct);
+
+    if (isEditing) {
+      dispatch(updateItemList({
         ...itemEdit,
-        comandaCodigo: comandaEdit.codigo,
-        funcionarioCodigo: atendenteEdit.codigo,
-        produtoCodigo: productFounded.codigo,
-        descricao: productFounded.nome,
-        unidade: productFounded.unidade,
-        quantidade: Number(amount),
-        unitario: productFounded.preco,
-        total: Number(amount) * productFounded.preco,
-        grupo: productFounded.grupo,
-        subgrupo: productFounded.subgrupo,
-        impresso: 'N',
-        obs: selectedObs,
-        enviado: 'N',
-        combinado: false,
-        codCombinado: '',
-        flavors: [] as ItemModel[],
-        repeat: false,
-      };
-      dispatch(updateItemList(newItem));
+        quantidade: amount,
+        total:      itemTotal,
+        servico,
+        obs:        obsText.trim(),
+      }));
     } else {
-      const newCodigo = new Date().getTime();
-      const newItem: ItemModel = {
-        mobileId: uuid.v4().toString(),
-        codigo: newCodigo.toString(),
-        comandaCodigo: comandaEdit.codigo,
+      const item: ItemModel = {
+        mobileId:          uuid.v4() as string,
+        codigo:            '',
+        comandaCodigo:     comandaEdit.codigo,
         funcionarioCodigo: atendenteEdit.codigo,
-        produtoCodigo: productFounded.codigo,
-        descricao: productFounded.nome,
-        unidade: productFounded.unidade,
-        quantidade: Number(amount),
-        unitario: productFounded.preco,
-        total: Number(amount) * productFounded.preco,
-        hora: newCodigo,
-        grupo: productFounded.grupo,
-        subgrupo: productFounded.subgrupo,
-        impresso: 'N',
-        obs: selectedObs,
-        enviado: 'N',
-        combinado: false,
-        codCombinado: '',
-        flavors: [] as ItemModel[],
-        repeat: false,
+        produtoCodigo:     foundProduct.codigo,
+        descricao:         foundProduct.nome,
+        unidade:           foundProduct.unidade,
+        quantidade:        amount,
+        unitario:          foundProduct.preco,
+        total:             itemTotal,
+        servico,
+        hora:              Date.now(),
+        grupo:             foundProduct.grupo,
+        subgrupo:          foundProduct.subgrupo,
+        impresso:          '',
+        obs:               obsText.trim(),
+        enviado:           '',
+        combinado:         false,
+        codCombinado:      '',
+        flavors:           [],
+        repeat:            false,
       };
-      dispatch(createItemList(newItem));
+      dispatch(createItemList(item));
     }
-    dispatch(createItemEdit({} as ItemModel));
-    productCodeClear();
-    navigate.navigate('atendimento');
-  };
+    navigation.goBack();
+  }
 
-  const handlePressMinus = () => {
-    setAmount(() => {
-      let newAmount = Number(amount.replace(',', '.')) - 1;
-      if (newAmount <= 0) {
-        newAmount = 0.5;
-        return formatDecimal(newAmount);
-      }
-      return formatDecimal(newAmount);
-    });
-  };
-
-  const handlePressPlus = () => {
-    setAmount(() => {
-      let newAmount = Number(amount.replace(',', '.')) + 1;
-      if (newAmount === 1.5) {
-        newAmount = 1;
-        return formatDecimal(newAmount);
-      }
-      return formatDecimal(newAmount);
-    });
-  };
-
-  const handlePressObs = (obs: ObservacoesModel) => {
-    let newObsLine = '';
-    if (selectedObs === undefined) {
-      newObsLine = `${obs.observacao}; `;
-    } else {
-      newObsLine = `${selectedObs}${obs.observacao}; `;
-    }
-    setSelectedObs(newObsLine);
-  };
-
-  const handleSearchProduct = () => {
-    navigate.navigate('searchProduct');
-  };
-
-  const handleCodeTyping = (text: string) => {
-    productCodeTyping(text);
-  };
-
-  const handleCleanCodeTyped = () => {
-    productCodeClear();
-  };
+  const step = foundProduct?.fracionado?.trim() === 'S' ? 0.5 : 1;
+  const filteredObs = observacoesList.filter(o =>
+    foundProduct ? (o.grupo === foundProduct.grupo || o.grupo === foundProduct.subgrupo) : false
+  );
 
   return (
-    <SafeAreaView
-      style={{
-        flex: 1,
-        backgroundColor: '#121214',
-      }}>
-      <VStack
-        bg={'gray.800'}
-        flex={1}
-        alignItems="center"
-        padding={4}
-        justifyContent="space-between">
-        <Heading color="white" mb={1}>
-          {`Comanda: ${comandaEdit.comanda}`}
-        </Heading>
-        <Heading color="white" size="sm">
-          {'Adicionar produto'}
-        </Heading>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Feather name="arrow-left" size={24} color={COLORS.WHITE} />
+        </TouchableOpacity>
+        <Text style={styles.title}>{isEditing ? 'Editar item' : 'Lançar por código'}</Text>
+      </View>
 
-        <VStack flex={1} w="100%" mb={2} mt={2}>
-          <Heading color="white" size="sm">
-            Código:
-          </Heading>
-          <HStack w="100%" justifyContent="space-between">
-            <Input
-              fontSize={18}
-              value={productCode}
-              w="60%"
-              autoFocus
-              mb={1}
-              placeholderTextColor="white"
-              backgroundColor="gray.700"
-              color="white"
-              keyboardType={
-                configEdit.keyboardHasLetters ? 'default' : 'number-pad'
-              }
-              onChangeText={handleCodeTyping}
-            />
-            {/* <NativeButton
-              h="46px"
-              w="18%"
-              colorScheme="red"
-              onPress={() => handleCleanCodeTyped}>
-              <IconFeather name="delete" size={20} color="#fff" />
-            </NativeButton> */}
-            <NativeButton
-              h="46px"
-              w="38%"
-              colorScheme="green"
-              onPress={handleSearchProduct}>
-              <IconFeather name="search" size={20} color="#fff" />
-            </NativeButton>
-          </HStack>
-          <Flex
-            w="100%"
-            backgroundColor="cyan.600"
-            rounded={5}
-            padding={1}
-            mb={2}>
-            <Text fontSize={16} color="white">
-              {productFounded ? productFounded?.nome : 'não localizado...'}
-            </Text>
-          </Flex>
-
-          <NumberSpinner
-            amount={amount}
-            label="Quantidade"
-            w={16}
-            handlePressMinus={handlePressMinus}
-            handlePressPlus={handlePressPlus}
+      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <View style={styles.searchRow}>
+          <Input
+            placeholder="Código do produto"
+            value={codigo}
+            onChangeText={setCodigo}
+            keyboardType={configEdit.keyboardHasLetters ? 'default' : 'numeric'}
+            onSubmitEditing={handleSearch}
+            returnKeyType="search"
+            style={{ flex: 1 }}
           />
-          <VStack
-            w="100%"
-            borderColor="cyan.600"
-            borderWidth={1}
-            mt={2}
-            mb={2}
-            rounded={5}
-            padding={2}
-            flex={1}>
-            <Center backgroundColor="cyan.600" mb={2} rounded={5}>
-              <Text color="#fff">Observações</Text>
-            </Center>
-            <HStack w="100%" justifyContent="space-between">
-              <Input
-                fontSize={12}
-                value={selectedObs}
-                w="80%"
-                mb={1}
-                placeholderTextColor="white"
-                backgroundColor="gray.700"
-                color="white"
-                keyboardType="default"
-                onChangeText={setSelectedObs}
-              />
-              <NativeButton
-                h="46px"
-                w="18%"
-                colorScheme="red"
-                onPress={() => setSelectedObs('')}>
-                <IconFeather name="delete" size={20} color="#fff" />
-              </NativeButton>
-            </HStack>
+          <TouchableOpacity style={styles.searchBtn} onPress={handleSearch}>
+            <Feather name="search" size={20} color={COLORS.BACKGROUND} />
+          </TouchableOpacity>
+        </View>
 
-            <FlatList
-              data={obsPorGrupo}
-              numColumns={2}
-              renderItem={({ item }) => (
-                <Pressable
-                  mr={1}
-                  maxW="96"
-                  minW="49%"
-                  onPress={() => handlePressObs(item)}
-                  mb={1}
-                  key="item.id">
-                  {({ isHovered, isPressed }) => {
-                    return (
-                      <Box
-                        bg={
-                          isPressed
-                            ? 'coolGray.200'
-                            : isHovered
-                            ? 'coolGray.200'
-                            : 'coolGray.100'
-                        }
-                        style={{
-                          transform: [
-                            {
-                              scale: isPressed ? 0.96 : 1,
-                            },
-                          ],
-                        }}
-                        p="1"
-                        rounded="8"
-                        shadow={3}
-                        borderWidth="1"
-                        borderColor="coolGray.300">
-                        <HStack alignItems="center">
-                          <Box
-                            colorScheme="darkBlue"
-                            variant="solid"
-                            rounded="4"
-                            padding="2">
-                            <Heading size="xs" color="gray.600">
-                              {item.observacao}
-                            </Heading>
-                          </Box>
-                          <Spacer />
-                        </HStack>
-                      </Box>
-                    );
-                  }}
-                </Pressable>
-              )}
+        <TouchableOpacity style={styles.searchByName} onPress={() => navigation.navigate('searchProduct')}>
+          <Feather name="type" size={16} color={COLORS.CYAN_500} />
+          <Text style={styles.searchByNameText}>Buscar por nome</Text>
+        </TouchableOpacity>
+
+        {foundProduct ? (() => {
+            const itemTotal = amount * foundProduct.preco;
+            const servico   = calcServico(itemTotal, foundProduct);
+            return (
+              <View style={styles.productCard}>
+                <View style={styles.productCardHeader}>
+                  <Text style={styles.productName}>{foundProduct.nome}</Text>
+                  <TouchableOpacity onPress={() => { setFoundProduct(null); setCodigo(''); }}>
+                    <Feather name="x" size={18} color={COLORS.GRAY_400} />
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.productPrice}>R$ {foundProduct.preco.toFixed(2)}</Text>
+                {servico > 0 ? (
+                  <Text style={styles.productTotal}>
+                    R$ {itemTotal.toFixed(2)} + R$ {servico.toFixed(2)} serv. = R$ {(itemTotal + servico).toFixed(2)}
+                  </Text>
+                ) : (
+                  <Text style={styles.productTotal}>Total: R$ {itemTotal.toFixed(2)}</Text>
+                )}
+                <Text style={styles.productGroup}>{foundProduct.grupo} › {foundProduct.subgrupo}</Text>
+              </View>
+            );
+          })() : (
+            <Text style={styles.noProduct}>Nenhum produto selecionado</Text>
+          )}
+
+        <NumberSpinner
+          label="Quantidade"
+          amount={amount}
+          handlePressMinus={() => setAmount(prev => Math.max(step, prev - step))}
+          handlePressPlus={() => setAmount(prev => prev + step)}
+        />
+
+        <View style={styles.obsContainer}>
+          <Text style={styles.obsLabel}>Observação</Text>
+          <View style={styles.obsInputRow}>
+            <Input
+              placeholder="Digite ou selecione abaixo..."
+              value={obsText}
+              onChangeText={setObsText}
+              multiline
+              style={styles.obsInput}
             />
-          </VStack>
-        </VStack>
-        <HStack w="100%" justifyContent="space-between">
-          <Button
-            variant="outline"
-            w="49%"
-            colorScheme="amber"
-            h={54}
-            onPress={handleBack}>
-            <Center>
-              <IconFeather name="arrow-left" size={18} color="#d97706" />
-              <Text color="amber.600" fontSize="14px" fontWeight="bold">
-                Voltar
-              </Text>
-            </Center>
-          </Button>
-          <Button
-            w="49%"
-            colorScheme="green"
-            h={54}
-            fontFamily="heading"
-            fontSize="md"
-            onPress={handleContinue}>
-            <Center>
-              <IconFeather name="check-square" size={18} color="#fff" />
-              <Text color="white" fontSize="14px">
-                Incluir produto
-              </Text>
-            </Center>
-          </Button>
-        </HStack>
-      </VStack>
-    </SafeAreaView>
-  );
-};
+            {obsText.length > 0 && (
+              <TouchableOpacity style={styles.clearObs} onPress={() => setObsText('')}>
+                <Feather name="x" size={16} color={COLORS.GRAY_400} />
+              </TouchableOpacity>
+            )}
+          </View>
+          {filteredObs.length > 0 && (
+            <Observacoes observacoes={filteredObs} selected={[]} onToggle={handleToggleObs} />
+          )}
+        </View>
 
-export default LancaPorCodigo;
+        <View style={{ marginTop: 24, marginBottom: 32 }}>
+          <Button
+            title={isEditing ? 'Salvar alteração' : 'Adicionar item'}
+            onPress={handleConfirm}
+          />
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLORS.BACKGROUND, padding: 16 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 40, marginBottom: 20 },
+  title: { color: COLORS.WHITE, fontSize: FONT_SIZE.LG, fontFamily: FONT_FAMILY.BOLD },
+  searchRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  searchBtn: { width: 54, height: 54, backgroundColor: COLORS.GOLD_500, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  searchByName: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 },
+  searchByNameText: { color: COLORS.CYAN_500, fontSize: FONT_SIZE.SM },
+  productCard: { backgroundColor: COLORS.SURFACE_800, borderRadius: 8, padding: 16, marginBottom: 16, borderLeftWidth: 3, borderLeftColor: COLORS.GOLD_500 },
+  productCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  productName: { color: COLORS.WHITE, fontFamily: FONT_FAMILY.BOLD, fontSize: FONT_SIZE.LG, flex: 1 },
+  productPrice: { color: COLORS.GOLD_500, fontFamily: FONT_FAMILY.BOLD, fontSize: FONT_SIZE.XL, marginTop: 4 },
+  productTotal: { color: COLORS.CYAN_500, fontSize: FONT_SIZE.SM, fontFamily: FONT_FAMILY.BOLD, marginTop: 6 },
+  productGroup: { color: COLORS.GRAY_400, fontSize: FONT_SIZE.SM, marginTop: 4 },
+  noProduct: { color: COLORS.GRAY_400, textAlign: 'center', marginVertical: 24 },
+  obsContainer: { marginTop: 20 },
+  obsLabel: { color: COLORS.GRAY_200, fontSize: FONT_SIZE.SM, fontFamily: FONT_FAMILY.BOLD, marginBottom: 8 },
+  obsInputRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
+  obsInput: { flex: 1, minHeight: 60, textAlignVertical: 'top' },
+  clearObs: { padding: 10 },
+});

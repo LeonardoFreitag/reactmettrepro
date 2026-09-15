@@ -1,4 +1,4 @@
 import { createStore } from 'redux';
-import reducer from './ducks/combineReducers';
+import { rootReducer } from './combineReducers';
 
-export default createStore(reducer);
+export const store = createStore(rootReducer);

@@ -1,318 +1,207 @@
-/* eslint-disable react-native/no-inline-styles */
-import { useNavigation } from '@react-navigation/native';
-import {
-  Box,
-  Button,
-  Center,
-  FlatList,
-  Flex,
-  Heading,
-  HStack,
-  Pressable,
-  Spacer,
-  Text,
-  VStack,
-  useToast,
-} from 'native-base';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-// import { Button } from '../../components/Button';
-import { Input } from '../../components/Input';
-import { ComandaModel } from '../../models/ComandaModel';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setUtl } from '../../services/api';
-import { ProdutoModel } from '../../models/ProdutoModel';
+import React, { useCallback, useState } from 'react';
+import { View, Text, FlatList, TouchableOpacity, TextInput, StyleSheet, RefreshControl, Alert } from 'react-native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Feather } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
-import { RootState } from '../../store/ducks/combineReducers';
-import { loadProdutoList } from '../../store/ducks/produtoList/actions';
-import {
-  createComandaList,
-  loadComandaList,
-} from '../../store/ducks/comandaList/actions';
+import { RootState } from '../../store/combineReducers';
 import { createComandaEdit } from '../../store/ducks/comandaEdit/actions';
-import { loadObservacoesList } from '../../store/ducks/observacoesList/actions';
-import { ObservacoesModel } from '../../models/ObservacoesModel';
-import { GrupoModel } from '../../models/GrupoModel';
+import { loadComandaList } from '../../store/ducks/comandaList/actions';
 import { loadGrupoList } from '../../store/ducks/grupoList/actions';
-import { SubgrupoModel } from '../../models/SubgrupoModel';
 import { loadSubgrupoList } from '../../store/ducks/subgrupoList/actions';
-import IconFeather from 'react-native-vector-icons/Feather';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { loadProdutoList } from '../../store/ducks/produtoList/actions';
+import { loadObservacoesList } from '../../store/ducks/observacoesList/actions';
+import { clearItemList } from '../../store/ducks/itemList/actions';
+import { userLoggedClear } from '../../storage/configStorage';
+import { createAtendenteEdit } from '../../store/ducks/atendenteEdit/actions';
+import { setUrl } from '../../services/api';
+import { ComandaModel } from '../../models/ComandaModel';
+import { AppStackParamList } from '../../routes';
+import { COLORS, FONT_FAMILY, FONT_SIZE } from '../../theme';
 
-const Comandas: React.FC = () => {
-  const navigate = useNavigation();
+type Nav = NativeStackNavigationProp<AppStackParamList, 'comandas'>;
+
+export function Comandas() {
+  const navigation = useNavigation<Nav>();
   const dispatch = useDispatch();
-  const toast = useToast();
-  const configEdit = useSelector((state: RootState) => state.configEdit.data);
-  const comandaList = useSelector((state: RootState) => state.comandaList.data);
-  const atendenteEdit = useSelector(
-    (state: RootState) => state.atendenteEdit.data,
-  );
-  const [comandaTyped, setComandaTyped] = useState('');
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const companyEdit = useSelector((state: RootState) => state.companyEdit.data);
+  const atendenteEdit = useSelector((state: RootState) => state.atendenteEdit.data);
+  const comandaList = useSelector((state: RootState) => state.comandaList.data);
 
-  const refreshComandas = useCallback(async () => {
-    setIsRefreshing(true);
-    const api = setUtl(companyEdit.ip, companyEdit.porta);
+  const [filter, setFilter] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  useFocusEffect(useCallback(() => { loadAll(); }, []));
+
+  async function loadAll() {
+    setRefreshing(true);
     try {
-      const response = await api.get<ComandaModel[]>('/mesas');
-      const data = response.data.map(comanda => {
-        return {
-          ...comanda,
-          criada: true,
-        };
-      });
-      dispatch(loadComandaList(data));
-      setIsRefreshing(false);
+      const api = setUrl(companyEdit.ip, companyEdit.porta);
+      const [mesas, grupos, subgrupos, produtos, obs] = await Promise.all([
+        api.get('/mesas'),
+        api.get('/grupos'),
+        api.get('/subgrupos'),
+        api.get('/products'),
+        api.get('/obs'),
+      ]);
+      dispatch(loadComandaList(mesas.data));
+      dispatch(loadGrupoList(grupos.data));
+      dispatch(loadSubgrupoList(subgrupos.data));
+      dispatch(loadProdutoList(produtos.data));
+      dispatch(loadObservacoesList(obs.data));
     } catch {
-      setIsRefreshing(false);
-      toast.show({
-        description: 'Sem comunicação com API!',
-        duration: 1000,
+      Alert.alert('Erro', 'Não foi possível carregar os dados.');
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  function getStatusColors(item: ComandaModel) {
+    if (item.status === 'F') {
+      return { bg: COLORS.DANGER, text: COLORS.WHITE, subtext: 'rgba(255,255,255,0.85)' };
+    }
+    return { bg: COLORS.WHITE, text: COLORS.BACKGROUND, subtext: COLORS.GRAY_400 };
+  }
+
+  function getStatusLabel(item: ComandaModel) {
+    return item.status === 'F' ? 'Fechada' : 'Aberta';
+  }
+
+  function handleSelect(item: ComandaModel) {
+    dispatch(createComandaEdit(item));
+    dispatch(clearItemList());
+    navigation.navigate('atendimento');
+  }
+
+  async function handleNewComanda() {
+    const num = filter.trim();
+    if (!num) return;
+
+    const existente = comandaList.find(c => c.comanda === num);
+    if (existente?.status === 'F') {
+      Alert.alert('Mesa fechada', `A mesa/comanda ${num} está fechada e não pode ser reaberta.`);
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const api = setUrl(companyEdit.ip, companyEdit.porta);
+      const { data } = await api.put('/mesas', {
+        codAtendente: atendenteEdit.codigo,
+        mesa: num,
       });
-    }
-  }, [companyEdit.ip, companyEdit.porta, dispatch, toast]);
 
-  useEffect(() => {
-    const loadSubgrupos = async () => {
-      const api = setUtl(companyEdit.ip, companyEdit.porta);
-      try {
-        const response = await api.get<SubgrupoModel[]>('/subgrupos');
-        dispatch(loadSubgrupoList(response.data));
-      } catch {}
-    };
-    loadSubgrupos;
-  }, [companyEdit.ip, companyEdit.porta, configEdit.ip, dispatch]);
+      // oretorno = chave primária integer retornada pelo Firebird → codigo (codMesa)
+      // num      = número digitado pelo usuário                   → comanda (exibição)
+      const item = Array.isArray(data) ? data[0] : data;
+      const pk = item?.oretorno ?? item?.oRetorno ?? item?.codigo ?? item?.id;
+      const codigoPK: string = pk != null ? String(pk) : num;
 
-  useEffect(() => {
-    const loadGrupos = async () => {
-      const api = setUtl(companyEdit.ip, companyEdit.porta);
-      try {
-        const response = await api.get<GrupoModel[]>('/grupos');
-        const dataGroups = response.data.map(item => {
-          return {
-            ...item,
-            selected: false,
-          };
-        });
-
-        dispatch(loadGrupoList(dataGroups));
-      } catch {}
-    };
-    loadGrupos();
-  }, [companyEdit.ip, companyEdit.porta, configEdit.ip, dispatch]);
-
-  useEffect(() => {
-    const loadProducts = async () => {
-      const api = setUtl(companyEdit.ip, companyEdit.porta);
-      try {
-        const response = await api.get<ProdutoModel[]>('/products');
-        const data = response.data.map(item => {
-          return {
-            ...item,
-            selected: false,
-          };
-        });
-
-        dispatch(loadProdutoList(data));
-      } catch {}
-    };
-    loadProducts();
-  }, [companyEdit.ip, companyEdit.porta, configEdit.ip, dispatch]);
-
-  useEffect(() => {
-    const loadObservacoes = async () => {
-      const api = setUtl(companyEdit.ip, companyEdit.porta);
-      try {
-        const response = await api.get<ObservacoesModel[]>('/obs');
-        dispatch(loadObservacoesList(response.data));
-      } catch {}
-    };
-    loadObservacoes();
-  }, [companyEdit.ip, companyEdit.porta, configEdit.ip, dispatch]);
-
-  useEffect(() => {
-    refreshComandas();
-  }, [configEdit.ip, dispatch, refreshComandas]);
-
-  const listFiltered = useMemo(() => {
-    return comandaList.filter(opt =>
-      opt.comanda.toLocaleLowerCase().includes(comandaTyped),
-    );
-  }, [comandaTyped, comandaList]);
-
-  const handlePress = (comanda: ComandaModel) => {
-    if (comanda.status === 'F') {
-      return;
-    }
-    dispatch(createComandaEdit(comanda));
-    setComandaTyped('');
-    navigate.navigate('atendimento');
-  };
-
-  const handleExit = async () => {
-    await AsyncStorage.removeItem('@mettre_userlogged');
-    navigate.navigate('signin');
-  };
-
-  const abreComanda = () => {
-    if (comandaTyped.trim() === '') {
-      return;
-    }
-    const existsComanda = listFiltered.find(
-      opt => opt.comanda === comandaTyped,
-    );
-    if (!existsComanda) {
-      const newCodigoComanda = new Date().getTime();
-
-      if (newCodigoComanda === 0) {
-        toast.show({
-          description: 'Comanda está fechada!',
-          duration: 1000,
-        });
-        return;
-      }
-      const newComanda: ComandaModel = {
-        codigo: newCodigoComanda.toString(),
-        comanda: comandaTyped,
-        destino: '',
+      const nova: ComandaModel = {
+        codigo:   codigoPK,
+        comanda:  num,
+        destino:  '',
         subtotal: 0,
-        total: 0,
-        status: 'A',
-        criada: false,
+        total:    item?.total ?? 0,
+        status:   item?.status ?? 'N',
+        criada:   true,
       };
-      dispatch(createComandaList(newComanda));
-      dispatch(createComandaEdit(newComanda));
-      setComandaTyped('');
-      navigate.navigate('atendimento');
-      // });
-    } else {
-      handlePress(existsComanda);
+      dispatch(createComandaEdit(nova));
+      dispatch(clearItemList());
+      navigation.navigate('atendimento');
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const msg = status
+        ? `Erro ${status} ao abrir a comanda.`
+        : 'Não foi possível conectar ao servidor.';
+      Alert.alert('Erro', msg);
+    } finally {
+      setCreating(false);
     }
-  };
+  }
+
+  async function handleLogout() {
+    await userLoggedClear();
+    dispatch(createAtendenteEdit({ codigo: '', nome: '', senha: '' }));
+    navigation.navigate('signin');
+  }
+
+  const filtered = filter ? comandaList.filter(c => c.comanda.includes(filter)) : comandaList;
 
   return (
-    <SafeAreaView
-      style={{
-        flex: 1,
-        backgroundColor: '#121214',
-      }}>
-      <VStack
-        bg={'gray.800'}
-        flex={1}
-        justifyContent="space-between"
-        alignItems="center"
-        padding={4}>
-        <Text fontSize={10} color="white" fontStyle="italic" mb={1}>
-          {`Atendente: ${atendenteEdit.nome}`}
-        </Text>
-        <Input
-          placeholder="Comanda..."
-          keyboardType="number-pad"
-          value={comandaTyped}
-          onChangeText={setComandaTyped}
-        />
-        <Flex flex={1} w="100%" mb={2}>
-          <FlatList
-            refreshing={isRefreshing}
-            onRefresh={refreshComandas}
-            data={listFiltered}
-            renderItem={({ item }) => (
-              <Pressable onPress={() => handlePress(item)} mb={1}>
-                {({ isHovered, isPressed }) => {
-                  let comandaColor = 'green.600';
-                  if (!item.criada) {
-                    comandaColor = 'info.500';
-                  } else {
-                    if (item.status === 'F') {
-                      comandaColor = 'red.600';
-                    }
-                  }
-                  return (
-                    <Box
-                      bg={
-                        isPressed
-                          ? 'coolGray.200'
-                          : isHovered
-                          ? 'coolGray.200'
-                          : 'coolGray.100'
-                      }
-                      style={{
-                        transform: [
-                          {
-                            scale: isPressed ? 0.96 : 1,
-                          },
-                        ],
-                      }}
-                      p="5"
-                      rounded="8"
-                      shadow={3}
-                      borderWidth="1"
-                      borderColor="coolGray.300">
-                      <HStack alignItems="center">
-                        <Box
-                          w="140px"
-                          h="60px"
-                          colorScheme="darkBlue"
-                          variant="solid"
-                          rounded="4"
-                          backgroundColor={comandaColor}
-                          padding="4">
-                          <Center>
-                            <Heading color="white" size="md">
-                              {item.comanda}
-                            </Heading>
-                          </Center>
-                        </Box>
-                        <Spacer />
-                        <VStack>
-                          <Text
-                            color="coolGray.800"
-                            fontWeight="medium"
-                            fontSize="lg"
-                            textAlign="right">
-                            {`Total: ${item.total.toLocaleString('pt-BR', {
-                              style: 'currency',
-                              currency: 'BRL',
-                            })}`}
-                          </Text>
-                        </VStack>
-                      </HStack>
-                    </Box>
-                  );
-                }}
-              </Pressable>
-            )}
-          />
-        </Flex>
-        <HStack w="100%" justifyContent="space-between">
-          <Button
-            variant="outline"
-            w="49%"
-            colorScheme="amber"
-            h={54}
-            fontFamily="heading"
-            fontSize="md"
-            onPress={handleExit}>
-            <Center>
-              <IconFeather name="log-out" size={18} color="#d97706" />
-              <Text color="amber.600" fontSize="14px" fontWeight="bold">
-                Sair
-              </Text>
-            </Center>
-          </Button>
-          <Button w="49%" colorScheme="darkBlue" h={54} onPress={abreComanda}>
-            <Center>
-              <IconFeather name="arrow-right" size={18} color="#ffffff" />
-              <Text color="white" fontSize="14px" fontWeight="bold">
-                Continuar
-              </Text>
-            </Center>
-          </Button>
-        </HStack>
-      </VStack>
-    </SafeAreaView>
-  );
-};
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.welcome}>Olá, {atendenteEdit.nome || 'Atendente'}</Text>
+          <Text style={styles.subtitle}>Selecione ou crie uma comanda</Text>
+        </View>
+        <TouchableOpacity onPress={handleLogout}>
+          <Feather name="log-out" size={24} color={COLORS.DANGER} />
+        </TouchableOpacity>
+      </View>
 
-export default Comandas;
+      <View style={styles.searchRow}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Nº da comanda..."
+          placeholderTextColor={COLORS.GRAY_400}
+          value={filter}
+          onChangeText={setFilter}
+          keyboardType="numeric"
+        />
+        <TouchableOpacity
+          style={[styles.newButton, creating && { opacity: 0.6 }]}
+          onPress={handleNewComanda}
+          disabled={creating}
+        >
+          <Feather name="plus" size={20} color={COLORS.BACKGROUND} />
+          <Text style={styles.newButtonText}>{creating ? 'Abrindo...' : 'Nova'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      <FlatList
+        data={filtered}
+        keyExtractor={item => item.codigo}
+        numColumns={2}
+        columnWrapperStyle={styles.row}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadAll} tintColor={COLORS.GOLD_500} />}
+        renderItem={({ item }) => {
+          const { bg, text, subtext } = getStatusColors(item);
+          const label = getStatusLabel(item);
+          return (
+            <TouchableOpacity
+              style={[styles.card, { backgroundColor: bg }]}
+              onPress={() => handleSelect(item)}
+            >
+              <Text style={[styles.cardNumber, { color: text }]}>{item.comanda}</Text>
+              <Text style={[styles.cardTotal, { color: subtext }]}>R$ {item.total.toFixed(2)}</Text>
+              <View style={styles.statusBadge}>
+                <Text style={styles.statusLabel}>{label}</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        }}
+        ListEmptyComponent={<Text style={styles.empty}>Nenhuma comanda encontrada</Text>}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLORS.BACKGROUND, padding: 16 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 40, marginBottom: 16 },
+  welcome: { color: COLORS.WHITE, fontSize: FONT_SIZE.LG, fontFamily: FONT_FAMILY.BOLD },
+  subtitle: { color: COLORS.GRAY_400, fontSize: FONT_SIZE.SM },
+  searchRow: { flexDirection: 'row', marginBottom: 16, gap: 8 },
+  searchInput: { flex: 1, height: 48, backgroundColor: COLORS.SURFACE_700, borderRadius: 8, paddingHorizontal: 12, color: COLORS.WHITE, fontSize: FONT_SIZE.MD },
+  newButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.GOLD_500, borderRadius: 8, paddingHorizontal: 16, height: 48, gap: 4 },
+  newButtonText: { color: COLORS.BACKGROUND, fontFamily: FONT_FAMILY.BOLD, fontSize: FONT_SIZE.MD },
+  row: { gap: 8, marginBottom: 8 },
+  card: { flex: 1, borderRadius: 8, padding: 16, alignItems: 'center' },
+  cardNumber: { fontSize: FONT_SIZE.XL, fontFamily: FONT_FAMILY.BOLD },
+  cardTotal: { fontSize: FONT_SIZE.SM, marginTop: 4 },
+  statusBadge: { marginTop: 8, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.35)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)', paddingHorizontal: 8, paddingVertical: 2 },
+  statusLabel: { fontSize: 11, fontFamily: FONT_FAMILY.BOLD, color: COLORS.WHITE },
+  empty: { color: COLORS.GRAY_400, textAlign: 'center', marginTop: 32 },
+});

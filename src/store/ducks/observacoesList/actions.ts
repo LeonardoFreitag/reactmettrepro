@@ -1,47 +1,6 @@
 import { ObservacoesModel } from '../../../models/ObservacoesModel';
-import { ObservacoesListTypes, ObservacoesListActionsTypes } from './types';
-
-export function loadObservacoesList(
-  observacoesList: ObservacoesModel[],
-): ObservacoesListActionsTypes {
-  return {
-    type: ObservacoesListTypes.LOAD_OBSERVACOESLIST_REQUEST,
-    payload: { observacoesList },
-  };
-}
-
-export function createObservacoesList(
-  observacoesList: ObservacoesModel,
-): ObservacoesListActionsTypes {
-  return {
-    type: ObservacoesListTypes.CREATE_OBSERVACOESLIST_REQUEST,
-    payload: { observacoesList },
-  };
-}
-
-export function updateObservacoesList(
-  observacoesList: ObservacoesModel,
-): ObservacoesListActionsTypes {
-  return {
-    type: ObservacoesListTypes.UPDATE_OBSERVACOESLIST_REQUEST,
-    payload: { observacoesList },
-  };
-}
-
-export function deleteObservacoesList(
-  observacoesList: ObservacoesModel,
-): ObservacoesListActionsTypes {
-  return {
-    type: ObservacoesListTypes.DELETE_OBSERVACOESLIST_REQUEST,
-    payload: { observacoesList },
-  };
-}
-
-export function clearObservacoesList(
-  observacoesList: ObservacoesModel,
-): ObservacoesListActionsTypes {
-  return {
-    type: ObservacoesListTypes.CLEAR_OBSERVACOESLIST_REQUEST,
-    payload: { observacoesList },
-  };
-}
+import { ObservacoesListTypes } from './types';
+export const loadObservacoesList   = (data: ObservacoesModel[]) => ({ type: ObservacoesListTypes.LOAD,   payload: data });
+export const createObservacoesList = (data: ObservacoesModel)   => ({ type: ObservacoesListTypes.CREATE, payload: data });
+export const deleteObservacoesList = (codigo: string)           => ({ type: ObservacoesListTypes.DELETE, payload: codigo });
+export const clearObservacoesList  = ()                         => ({ type: ObservacoesListTypes.CLEAR });

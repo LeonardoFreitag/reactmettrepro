@@ -1,35 +1,13 @@
-import { CompanyModel } from '../../../models/CompanyModel';
-import {
-  CompanyEditTypes,
-  CompanyEditState,
-  CompanyEditActionsTypes,
-} from './types';
-
-const INITIAL_STATE: CompanyEditState = {
-  data: {} as CompanyModel,
-};
-
-export default function CompanyEditReducer(
-  state = INITIAL_STATE,
-  action: CompanyEditActionsTypes,
-): CompanyEditState {
+import { CompanyEditTypes, CompanyEditState } from './types';
+const INITIAL_STATE: CompanyEditState = { data: { id: '', nome: '', ip: '', porta: '', isSelected: false } };
+export default function companyEditReducer(state = INITIAL_STATE, action: { type: CompanyEditTypes; payload?: any }): CompanyEditState {
   switch (action.type) {
-    case CompanyEditTypes.CREATE_COMPANYEDIT_REQUEST:
-      return {
-        data: action.payload.companyEdit,
-      };
-    case CompanyEditTypes.UPDATE_COMPANYEDIT_REQUEST: {
-      const data = action.payload.companyEdit;
-      return { data };
-    }
-    case CompanyEditTypes.DELETE_COMPANYEDIT_REQUEST: {
-      const data = {} as CompanyModel;
-      return { data };
-    }
-    case CompanyEditTypes.CLEAR_COMPANYEDIT_REQUEST: {
-      const data = {} as CompanyModel;
-      return { data };
-    }
+    case CompanyEditTypes.CREATE:
+    case CompanyEditTypes.UPDATE:
+      return { data: action.payload };
+    case CompanyEditTypes.DELETE:
+    case CompanyEditTypes.CLEAR:
+      return INITIAL_STATE;
     default:
       return state;
   }

@@ -1,38 +1,6 @@
 import { SubgrupoModel } from '../../../models/SubgrupoModel';
-import { SubgrupoEditTypes, SubgrupoEditActionsTypes } from './types';
-
-export function createSubgrupoEdit(
-  subgrupoEdit: SubgrupoModel,
-): SubgrupoEditActionsTypes {
-  return {
-    type: SubgrupoEditTypes.CREATE_SUBGRUPOEDIT_REQUEST,
-    payload: { subgrupoEdit },
-  };
-}
-
-export function updateSubgrupoEdit(
-  subgrupoEdit: SubgrupoModel,
-): SubgrupoEditActionsTypes {
-  return {
-    type: SubgrupoEditTypes.UPDATE_SUBGRUPOEDIT_REQUEST,
-    payload: { subgrupoEdit },
-  };
-}
-
-export function deleteSubgrupoEdit(
-  subgrupoEdit: SubgrupoModel,
-): SubgrupoEditActionsTypes {
-  return {
-    type: SubgrupoEditTypes.DELETE_SUBGRUPOEDIT_REQUEST,
-    payload: { subgrupoEdit },
-  };
-}
-
-export function clearSubgrupoEdit(
-  subgrupoEdit: SubgrupoModel,
-): SubgrupoEditActionsTypes {
-  return {
-    type: SubgrupoEditTypes.CLEAR_SUBGRUPOEDIT_REQUEST,
-    payload: { subgrupoEdit },
-  };
-}
+import { SubgrupoEditTypes } from './types';
+export const createSubgrupoEdit = (data: SubgrupoModel) => ({ type: SubgrupoEditTypes.CREATE, payload: data });
+export const updateSubgrupoEdit = (data: SubgrupoModel) => ({ type: SubgrupoEditTypes.UPDATE, payload: data });
+export const deleteSubgrupoEdit = () => ({ type: SubgrupoEditTypes.DELETE });
+export const clearSubgrupoEdit  = () => ({ type: SubgrupoEditTypes.CLEAR });

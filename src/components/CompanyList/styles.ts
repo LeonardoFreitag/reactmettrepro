@@ -1,26 +1,21 @@
 import styled from 'styled-components/native';
+import { COLORS } from '../../theme';
 
-export interface ButtonProps {
-  isSelected: boolean;
-}
-
-export const Container = styled.View`
-  flex-direction: row;
-  width: 100%;
-  justify-content: space-between;
-  margin-bottom: 10px;
+export const ListContainer = styled.View`
+  margin-vertical: 8px;
 `;
 
-export const Button = styled.TouchableOpacity<ButtonProps>`
-  flex: 0.49;
-  /* background-color: #7c7c8a; */
-  background-color: ${props => (props.isSelected ? '#00875F' : '#5f5f6b')};
-  padding: 10px;
-  border-radius: 5px;
-  align-items: center;
+export const ItemContainer = styled.TouchableOpacity<{ isSelected: boolean }>`
+  padding: 8px 16px;
+  border-radius: 20px;
+  margin-right: 8px;
+  background-color: ${({ isSelected }) => isSelected ? COLORS.GOLD_500 : COLORS.SURFACE_700};
+  border-width: 1px;
+  border-color: ${({ isSelected }) => isSelected ? COLORS.GOLD_500 : COLORS.SURFACE_600};
 `;
 
-export const ButtonText = styled.Text<ButtonProps>`
-  font-size: 16px;
-  color: #fff;
+export const ItemText = styled.Text<{ isSelected: boolean }>`
+  color: ${({ isSelected }) => isSelected ? COLORS.BACKGROUND : COLORS.GRAY_200};
+  font-size: 14px;
+  font-weight: ${({ isSelected }) => isSelected ? 'bold' : 'normal'};
 `;

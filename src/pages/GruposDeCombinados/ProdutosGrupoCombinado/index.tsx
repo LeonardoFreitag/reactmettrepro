@@ -1,344 +1,177 @@
-/* eslint-disable react-native/no-inline-styles */
+import React, { useState } from 'react';
+import { View, Text, FlatList, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import {
-  Button,
-  Center,
-  FlatList,
-  Flex,
-  Heading,
-  HStack,
-  Text,
-  VStack,
-  useToast,
-  Input,
-  Badge,
-} from 'native-base';
-import React, { useCallback, useMemo, useState } from 'react';
-import IconFeather from 'react-native-vector-icons/Feather';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Feather } from '@expo/vector-icons';
 import { useDispatch, useSelector } from 'react-redux';
-import { RootState } from '../../../store/ducks/combineReducers';
-import { formatCurrency } from '../../../utils/formatCurrency';
-import { ItemModel } from '../../../models/ItemModel';
 import uuid from 'react-native-uuid';
-import {
-  createItemList,
-  updateItemList,
-} from '../../../store/ducks/itemList/actions';
-import { createFlavorEdit } from '../../../store/ducks/flavorEdit/actions';
+import { RootState } from '../../../store/combineReducers';
+import { createItemList, updateItemList } from '../../../store/ducks/itemList/actions';
+import { clearFlavorEdit } from '../../../store/ducks/flavorEdit/actions';
 import { FlavorModel } from '../../../models/FlavorModel';
-import { clearFlavorList } from '../../../store/ducks/flavorList/actions';
-import {
-  clearFlavorsSelected,
-  createFlavorsSelected,
-} from '../../../store/ducks/flavorsSelected/actions';
+import { ItemModel } from '../../../models/ItemModel';
 import { CombinedModal } from './CombinedModal';
-import { useProductSearch } from '../../../hooks/product';
-import { SafeAreaView } from 'react-native';
+import { ObservacoesModal } from './ObservacoesModal';
+import { AppStackParamList } from '../../../routes';
+import { COLORS, FONT_FAMILY, FONT_SIZE } from '../../../theme';
 
-const ProdutosGrupoCombinado: React.FC = () => {
-  const { obsFlavor, obsFlavorClear } = useProductSearch();
-  const navigate = useNavigation();
+type Nav = NativeStackNavigationProp<AppStackParamList, 'produtosGrupoCombinado'>;
+
+export function ProdutosGrupoCombinado() {
+  const navigation = useNavigation<Nav>();
   const dispatch = useDispatch();
-  const toast = useToast();
-
-  const comandaEdit = useSelector((state: RootState) => state.comandaEdit.data);
   const grupoEdit = useSelector((state: RootState) => state.grupoEdit.data);
-  const subgrupoEdit = useSelector(
-    (state: RootState) => state.subgrupoEdit.data,
-  );
-  const flavorEdit = useSelector((state: RootState) => state.flavorEdit.data);
   const flavorList = useSelector((state: RootState) => state.flavorList.data);
-  const flavorsSelected = useSelector(
-    (state: RootState) => state.flavorsSelected.data,
-  );
-  const atendenteEdit = useSelector(
-    (state: RootState) => state.atendenteEdit.data,
-  );
-  const [descTyped, setDescTyped] = useState<string>('');
-  const [showCombinedModal, setShowCombinedModal] = useState<boolean>(false);
+  const flavorEdit = useSelector((state: RootState) => state.flavorEdit.data);
+  const comandaEdit = useSelector((state: RootState) => state.comandaEdit.data);
+  const atendenteEdit = useSelector((state: RootState) => state.atendenteEdit.data);
 
-  const handleBack = () => {
-    obsFlavorClear();
-    dispatch(clearFlavorsSelected({} as FlavorModel));
-    navigate.navigate('gruposDeCombinados');
-  };
+  const isEditing = !!flavorEdit.mobileId;
+  const maxFlavors = grupoEdit.sabores;
 
-  const handleContinue = () => {
-    const newCodigoCombinado = new Date().getTime();
-    let totalCombined = 0;
-    const flavors: ItemModel[] = flavorsSelected.map((item, index) => {
-      let obsLocal = '';
-      let qtdeFlavor = 1 / flavorsSelected.length;
-      if (flavorsSelected.length === 3) {
-        if (index === 2) {
-          qtdeFlavor = 0.34;
-        } else {
-          qtdeFlavor = 0.33;
-        }
-      }
-      if (index === flavorsSelected.length - 1) {
-        obsLocal = obsFlavor;
-      }
-      const flavorPrice = item.preco * qtdeFlavor;
-      totalCombined = totalCombined + flavorPrice;
-      const newCodigo = new Date().getTime();
-      return {
-        mobileId: uuid.v4().toString(),
-        codigo: newCodigo.toString(),
-        comandaCodigo: comandaEdit.codigo,
-        funcionarioCodigo: atendenteEdit.codigo,
-        produtoCodigo: item.codigo,
-        descricao: item.nome,
-        unidade: 'UN',
-        quantidade: qtdeFlavor,
-        unitario: item.preco,
-        total: flavorPrice,
-        hora: newCodigo,
-        grupo: item.grupo,
-        subgrupo: item.subgrupo,
-        impresso: 'N',
-        obs: obsLocal,
-        enviado: 'N',
-        combinado: false,
-        codCombinado: newCodigoCombinado.toString(),
-        flavors: [] as ItemModel[],
-        repeat: false,
-      };
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<FlavorModel[]>([]);
+  const [showCombined, setShowCombined] = useState(false);
+  const [showObs, setShowObs] = useState(false);
+  const [pendingObs, setPendingObs] = useState('');
+
+  const byGroup = flavorList.filter(f =>
+    f.grupo === grupoEdit.codigo || f.grupo === grupoEdit.nome
+  );
+
+  const filtered = byGroup.filter(f =>
+    search ? f.nome.toLowerCase().includes(search.toLowerCase()) : true
+  );
+
+  function handleToggle(item: FlavorModel) {
+    setSelected(prev => {
+      const exists = prev.find(f => f.codigo === item.codigo);
+      if (exists) return prev.filter(f => f.codigo !== item.codigo);
+      if (prev.length >= maxFlavors) return prev;
+      return [...prev, item];
     });
-    const newCodigo = new Date().getTime();
-    if (flavorEdit.combinado) {
-      dispatch(
-        updateItemList({
-          ...flavorEdit,
-          flavors: flavors,
-        }),
-      );
-      dispatch(createFlavorEdit({} as ItemModel));
-      dispatch(clearFlavorList({} as FlavorModel));
-      navigate.navigate('atendimento');
+  }
+
+  function calcTotal(flavors: FlavorModel[]): number {
+    if (!flavors.length) return 0;
+    const maxPrice = Math.max(...flavors.map(f => f.preco));
+    return maxPrice;
+  }
+
+  function buildCombinedItem(obsText: string): ItemModel {
+    const total = calcTotal(selected);
+    const codCombinado = uuid.v4() as string;
+    const flavorsItems: ItemModel[] = selected.map(f => ({
+      mobileId: uuid.v4() as string,
+      codigo: '',
+      comandaCodigo: comandaEdit.codigo,
+      funcionarioCodigo: atendenteEdit.codigo,
+      produtoCodigo: f.codigo,
+      descricao: f.nome,
+      unidade: f.unidade,
+      quantidade: 1 / selected.length,
+      unitario: f.preco,
+      total: total / selected.length,
+      hora: Date.now(),
+      grupo: f.grupo,
+      subgrupo: f.subgrupo,
+      impresso: '',
+      obs: obsText,
+      enviado: '',
+      combinado: true,
+      codCombinado,
+      flavors: [],
+      repeat: false,
+    }));
+
+    return {
+      mobileId: isEditing ? flavorEdit.mobileId : uuid.v4() as string,
+      codigo: '',
+      comandaCodigo: comandaEdit.codigo,
+      funcionarioCodigo: atendenteEdit.codigo,
+      produtoCodigo: selected[0]?.codigo ?? '',
+      descricao: selected.map(f => f.nome).join(' / '),
+      unidade: selected[0]?.unidade ?? 'UN',
+      quantidade: 1,
+      unitario: total,
+      total,
+      hora: Date.now(),
+      grupo: grupoEdit.codigo,
+      subgrupo: '',
+      impresso: '',
+      obs: obsText,
+      enviado: '',
+      combinado: true,
+      codCombinado,
+      flavors: flavorsItems,
+      repeat: false,
+    };
+  }
+
+  function handleObsConfirm(obs: string) {
+    setShowObs(false);
+    const item = buildCombinedItem(obs);
+    if (isEditing) {
+      dispatch(updateItemList(item));
     } else {
-      const item: ItemModel = {
-        mobileId: uuid.v4().toString(),
-        codigo: newCodigo.toString(),
-        comandaCodigo: comandaEdit.codigo,
-        funcionarioCodigo: atendenteEdit.codigo,
-        produtoCodigo: grupoEdit.codigo,
-        descricao: grupoEdit.nome,
-        unidade: 'UN',
-        quantidade: 1,
-        unitario: totalCombined,
-        total: totalCombined,
-        hora: newCodigo,
-        grupo: grupoEdit.nome,
-        subgrupo: subgrupoEdit.nome,
-        impresso: 'N',
-        obs: '',
-        enviado: 'N',
-        combinado: true,
-        codCombinado: newCodigoCombinado.toString(),
-        flavors: flavors,
-        repeat: false,
-      };
       dispatch(createItemList(item));
-      obsFlavorClear();
-      dispatch(clearFlavorsSelected({} as FlavorModel));
-      navigate.navigate('atendimento');
     }
-  };
-
-  const memoFlavorList = useMemo(() => {
-    if (descTyped.trim() !== '') {
-      const desc = descTyped.toLowerCase();
-      return flavorList.filter(flavorItem =>
-        flavorItem.nome.toLowerCase().includes(desc),
-      );
-    }
-    return [] as FlavorModel[];
-  }, [descTyped, flavorList]);
-
-  const handlePressProduct = (itemSelected: FlavorModel) => {
-    if (
-      flavorsSelected.length === grupoEdit.sabores &&
-      !itemSelected.selected
-    ) {
-      toast.show({
-        description: 'Limite de sabores atingido!',
-        duration: 1000,
-      });
-      return;
-    }
-    dispatch(createFlavorsSelected(itemSelected));
-  };
-
-  const handleShowCombinedModal = () => {
-    setShowCombinedModal(true);
-  };
-
-  const handleCancelCombinedModal = () => {
-    setShowCombinedModal(false);
-  };
+    dispatch(clearFlavorEdit());
+    navigation.navigate('atendimento');
+  }
 
   return (
-    <SafeAreaView
-      style={{
-        flex: 1,
-        backgroundColor: '#121214',
-      }}>
-      {showCombinedModal && (
-        <CombinedModal
-          isOpen={showCombinedModal}
-          handleCancel={handleCancelCombinedModal}
-        />
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.navigate('gruposDeCombinados')}>
+          <Feather name="arrow-left" size={24} color={COLORS.WHITE} />
+        </TouchableOpacity>
+        <Text style={styles.title}>{grupoEdit.nome}</Text>
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>{selected.length}/{maxFlavors}</Text>
+        </View>
+      </View>
+      <TextInput style={styles.searchInput} placeholder="Buscar sabor..." placeholderTextColor={COLORS.GRAY_400} value={search} onChangeText={setSearch} />
+      <FlatList
+        data={filtered}
+        keyExtractor={item => item.codigo}
+        numColumns={2}
+        columnWrapperStyle={styles.row}
+        renderItem={({ item }) => {
+          const isSelected = !!selected.find(f => f.codigo === item.codigo);
+          return (
+            <TouchableOpacity style={[styles.card, isSelected && styles.cardSelected]} onPress={() => handleToggle(item)}>
+              <Text style={[styles.cardName, isSelected && styles.cardNameSelected]}>{item.nome}</Text>
+              {isSelected && <Feather name="check" size={14} color={COLORS.CYAN_500} />}
+            </TouchableOpacity>
+          );
+        }}
+        ListEmptyComponent={<Text style={styles.empty}>Nenhum sabor encontrado</Text>}
+      />
+      {selected.length > 0 && (
+        <TouchableOpacity style={styles.mountBtn} onPress={() => setShowCombined(true)}>
+          <Text style={styles.mountBtnText}>Montar combinado ({selected.length} sabores)</Text>
+        </TouchableOpacity>
       )}
-
-      <VStack
-        bg={'gray.800'}
-        flex={1}
-        justifyContent="space-between"
-        alignItems="center"
-        padding={4}>
-        <Heading
-          color="white"
-          size="md">{`Comanda: ${comandaEdit.comanda} - Pedido combinado`}</Heading>
-        <HStack
-          marginY="5px"
-          w="100%"
-          p="8px"
-          borderColor="amber.100"
-          borderStyle="solid"
-          borderWidth={1}
-          borderRadius={5}
-          justifyContent="space-between">
-          <VStack w="80%" justifyContent="center">
-            <Heading color="white" size="sm">
-              {`${grupoEdit.nome} até ${grupoEdit.sabores} sabores`}
-            </Heading>
-            {/* <Heading color="white" size="sm">
-              {`Obs.: ${obsCombined}`}
-            </Heading> */}
-          </VStack>
-          <VStack w="20%">
-            <Badge // bg="red.400"
-              colorScheme="danger"
-              rounded="full"
-              mb={-4}
-              mr={-1}
-              zIndex={1}
-              variant="solid"
-              alignSelf="flex-end"
-              _text={{
-                fontSize: 12,
-              }}>
-              {flavorsSelected.length}
-            </Badge>
-            <Button
-              mx={{
-                base: 'auto',
-                md: 0,
-              }}
-              h="46px"
-              w="56px"
-              colorScheme="green"
-              onPress={handleShowCombinedModal}>
-              <IconFeather name="pie-chart" size={20} color="#fff" />
-            </Button>
-          </VStack>
-        </HStack>
-        <HStack w="100%" justifyContent="space-between" mt={2}>
-          <Input
-            fontSize={18}
-            value={descTyped}
-            w="83%"
-            autoFocus
-            mb={1}
-            placeholderTextColor="white"
-            backgroundColor="gray.700"
-            color="white"
-            onChangeText={setDescTyped}
-          />
-          <Button
-            h="46px"
-            w="15%"
-            colorScheme="red"
-            onPress={() => setDescTyped('')}>
-            <IconFeather name="delete" size={20} color="#fff" />
-          </Button>
-        </HStack>
-        <Flex flex={1} w="100%" mb={2}>
-          <FlatList
-            data={memoFlavorList}
-            renderItem={({ item }) => (
-              <HStack
-                rounded="5"
-                shadow={3}
-                borderColor="gray.100"
-                mb={1}
-                w="100%"
-                justifyContent="space-between">
-                <VStack
-                  p={1}
-                  backgroundColor="gray.100"
-                  borderRadius={5}
-                  w="84%">
-                  <HStack
-                    w="100%"
-                    justifyContent="space-between"
-                    alignItems="center"
-                    h="40px"
-                    px={4}>
-                    <Text w="70%">{`${item.codigo}-${item.nome}`}</Text>
-                    <Text w="30%" textAlign="right">{`${formatCurrency(
-                      item.preco,
-                    )}`}</Text>
-                  </HStack>
-                </VStack>
-
-                <Button
-                  w="15%"
-                  onPress={() => {
-                    handlePressProduct(item);
-                  }}>
-                  <Center>
-                    <IconFeather name="plus-square" size={20} color="#fff" />
-                  </Center>
-                </Button>
-              </HStack>
-            )}
-          />
-        </Flex>
-
-        <HStack w="100%" justifyContent="space-between">
-          <Button
-            variant="outline"
-            w="48%"
-            colorScheme="amber"
-            h={54}
-            onPress={handleBack}>
-            <Center>
-              <IconFeather name="arrow-left" size={18} color="#d97706" />
-              <Text color="amber.600" fontSize="14px" fontWeight="bold">
-                Voltar
-              </Text>
-            </Center>
-          </Button>
-          <Button
-            w="48%"
-            colorScheme="green"
-            h={54}
-            fontFamily="heading"
-            fontSize="md"
-            onPress={handleContinue}>
-            <Center>
-              <IconFeather name="check-square" size={18} color="#fff" />
-              <Text color="white" fontSize="14px">
-                Incluir produto
-              </Text>
-            </Center>
-          </Button>
-        </HStack>
-      </VStack>
-    </SafeAreaView>
+      <CombinedModal isOpen={showCombined} flavors={selected} total={calcTotal(selected)} onConfirm={() => { setShowCombined(false); setShowObs(true); }} onCancel={() => setShowCombined(false)} />
+      <ObservacoesModal isOpen={showObs} grupoCodigo={grupoEdit.codigo} grupoNome={grupoEdit.nome} onConfirm={handleObsConfirm} onCancel={() => setShowObs(false)} />
+    </View>
   );
-};
+}
 
-export default ProdutosGrupoCombinado;
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLORS.BACKGROUND, padding: 16 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 40, marginBottom: 16 },
+  title: { color: COLORS.WHITE, fontSize: FONT_SIZE.LG, fontFamily: FONT_FAMILY.BOLD, flex: 1 },
+  badge: { backgroundColor: COLORS.CYAN_500, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
+  badgeText: { color: COLORS.BACKGROUND, fontFamily: FONT_FAMILY.BOLD, fontSize: FONT_SIZE.SM },
+  searchInput: { height: 48, backgroundColor: COLORS.SURFACE_700, borderRadius: 8, paddingHorizontal: 12, color: COLORS.WHITE, fontSize: FONT_SIZE.MD, marginBottom: 12 },
+  row: { gap: 8, marginBottom: 8 },
+  card: { flex: 1, backgroundColor: COLORS.SURFACE_800, borderRadius: 8, padding: 12, borderWidth: 1.5, borderColor: COLORS.SURFACE_600, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  cardSelected: { borderColor: COLORS.CYAN_500, backgroundColor: `${COLORS.CYAN_500}11` },
+  cardName: { color: COLORS.GRAY_100, fontSize: FONT_SIZE.SM, flex: 1 },
+  cardNameSelected: { color: COLORS.CYAN_500, fontFamily: FONT_FAMILY.BOLD },
+  empty: { color: COLORS.GRAY_400, textAlign: 'center', marginTop: 32 },
+  mountBtn: { backgroundColor: COLORS.GOLD_500, borderRadius: 8, height: 54, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  mountBtnText: { color: COLORS.BACKGROUND, fontFamily: FONT_FAMILY.BOLD, fontSize: FONT_SIZE.MD },
+});
