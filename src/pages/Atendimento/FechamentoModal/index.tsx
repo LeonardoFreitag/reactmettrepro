@@ -7,19 +7,30 @@ import { Feather } from '@expo/vector-icons';
 import { COLORS, FONT_FAMILY, FONT_SIZE } from '../../../theme';
 import { CIELO_PAYMENT_METHODS, CieloPaymentMethod } from '../../../models/CieloModel';
 
-type PaymentRecord = {
+/** Pagamento Cielo aprovado, no formato devolvido por GET /cielo/pagamentos/:codMesa */
+export type CieloPagamentoRecord = {
+  id: number;
+  meioPagamento: string;  // ex: "CREDITO_AVISTA"
+  bandeira: string;
+  valorPago: number;      // em R$
   authCode: string;
-  amount: number;   // em R$
-  method: string;
+  nsu: string;
 };
+
+function methodLabel(code: string): string {
+  return CIELO_PAYMENT_METHODS.find(m => m.code === code)?.label ?? code;
+}
 
 type Props = {
   isOpen: boolean;
   total: number;
   hasPending: boolean;
   hasCieloConfig: boolean;
+  /** Pagamentos Cielo já aprovados para a comanda (controlado pelo pai; vem do servidor). */
+  cieloPagamentos: CieloPagamentoRecord[];
   onConfirm: (destino: string) => void;
-  onCieloStart: () => void;
+  /** Chamado uma única vez quando o total pago via Cielo atinge o total da conta. */
+  onCieloComplete: () => void;
   onCieloPayment: (paymentCode: string, amountCents: number) => Promise<{ authCode: string } | null>;
   onCancel: () => void;
 };
@@ -31,27 +42,31 @@ export function FechamentoModal({
   total,
   hasPending,
   hasCieloConfig,
+  cieloPagamentos,
   onConfirm,
-  onCieloStart,
+  onCieloComplete,
   onCieloPayment,
   onCancel,
 }: Props) {
   const [screen, setScreen] = useState<Screen>('main');
-  const [paidSoFar, setPaidSoFar] = useState(0);
   const [inputAmount, setInputAmount] = useState('');
-  const [history, setHistory] = useState<PaymentRecord[]>([]);
   const [processing, setProcessing] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
 
+  // Valor já recebido via Cielo é derivado da lista controlada pelo pai
+  // (carregada do servidor + pagamentos feitos nesta sessão). Assim, fechar o
+  // modal ou reabrir a comanda não "esquece" o que já foi pago.
+  const paidSoFar = cieloPagamentos.reduce((sum, p) => sum + p.valorPago, 0);
   const remaining = Math.max(total - paidSoFar, 0);
+  // Conta totalmente recebida via Cielo: nenhuma nova cobrança pode ser acionada.
+  const fullyPaid = paidSoFar > 0 && paidSoFar >= total - 0.009;
+  const cieloDisabled = hasPending || fullyPaid;
 
-  // Reseta estado ao abrir o modal
+  // Reseta apenas o estado de navegação ao abrir o modal
   useEffect(() => {
     if (isOpen) {
       setScreen('main');
-      setPaidSoFar(0);
-      setHistory([]);
-      setInputAmount(total.toFixed(2));
+      setInputAmount(remaining.toFixed(2));
       setProcessing(false);
       setSelectedMethod(null);
     }
@@ -86,9 +101,10 @@ export function FechamentoModal({
   }
 
   async function handleMethodSelect(method: CieloPaymentMethod) {
+    if (fullyPaid) return; // defesa extra: total já recebido, não cobra de novo
     const val = parseFloat(inputAmount.replace(',', '.'));
     const amountCents = Math.round(val * 100);
-    if (!amountCents) return;
+    if (!amountCents || val > remaining + 0.009) return;
 
     setSelectedMethod(method.code);
     setProcessing(true);
@@ -104,18 +120,14 @@ export function FechamentoModal({
       return;
     }
 
+    // O pai já adicionou o pagamento em cieloPagamentos; calculamos aqui com o
+    // valor local para não depender do re-render.
     const newPaid = paidSoFar + val;
-    const newHistory: PaymentRecord[] = [
-      ...history,
-      { authCode: result.authCode, amount: val, method: method.label },
-    ];
-
-    setPaidSoFar(newPaid);
-    setHistory(newHistory);
 
     if (newPaid >= total - 0.009) {
-      // Total atingido — fecha a conta
-      onConfirm('F');
+      // Total atingido — fecha a conta uma única vez e envia a solicitação de
+      // impressão ao caixa (sinal para receber e emitir a NFC-e)
+      onCieloComplete();
     } else {
       // Ainda há saldo — volta para tela de valor
       setInputAmount((total - newPaid).toFixed(2));
@@ -131,6 +143,23 @@ export function FechamentoModal({
         <Text style={styles.subtitle}>Total da comanda</Text>
         <Text style={styles.totalValue}>R$ {total.toFixed(2)}</Text>
 
+        {fullyPaid ? (
+          <View style={styles.paidInfo}>
+            <Feather name="check-circle" size={14} color={COLORS.SUCCESS} />
+            <Text style={styles.paidInfoText}>
+              Conta totalmente recebida via Cielo (R$ {paidSoFar.toFixed(2)}).
+              Envie o fechamento ao caixa para concluir.
+            </Text>
+          </View>
+        ) : paidSoFar > 0 ? (
+          <View style={styles.paidInfo}>
+            <Feather name="check-circle" size={14} color={COLORS.SUCCESS} />
+            <Text style={styles.paidInfoText}>
+              Já recebido via Cielo: R$ {paidSoFar.toFixed(2)} — restante R$ {remaining.toFixed(2)}
+            </Text>
+          </View>
+        ) : null}
+
         {hasPending && (
           <View style={styles.warning}>
             <Feather name="alert-triangle" size={14} color={COLORS.GOLD_500} />
@@ -142,13 +171,12 @@ export function FechamentoModal({
 
         {hasCieloConfig && (
           <TouchableOpacity
-            style={[styles.btn, styles.btnCielo, hasPending && styles.btnDisabled]}
+            style={[styles.btn, styles.btnCielo, cieloDisabled && styles.btnDisabled]}
             onPress={() => {
-              if (hasPending) return;
-              onCieloStart();
+              if (cieloDisabled) return;
               handleGoToAmount();
             }}
-            disabled={hasPending}
+            disabled={cieloDisabled}
           >
             <Feather name="credit-card" size={18} color={COLORS.WHITE} />
             <Text style={styles.btnText}>Pagar com Cielo</Text>
@@ -161,7 +189,9 @@ export function FechamentoModal({
           disabled={hasPending}
         >
           <Feather name="x-circle" size={18} color={COLORS.WHITE} />
-          <Text style={styles.btnText}>Fechar conta (sem Cielo)</Text>
+          <Text style={styles.btnText}>
+            {fullyPaid ? 'Fechar conta e enviar ao caixa' : 'Fechar conta (sem Cielo)'}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -216,13 +246,13 @@ export function FechamentoModal({
         </View>
 
         {/* Histórico de pagamentos anteriores */}
-        {history.length > 0 && (
+        {cieloPagamentos.length > 0 && (
           <View style={styles.historyBox}>
-            {history.map((p, i) => (
-              <View key={i} style={styles.historyRow}>
+            {cieloPagamentos.map((p, i) => (
+              <View key={p.id ?? i} style={styles.historyRow}>
                 <Feather name="check-circle" size={13} color={COLORS.SUCCESS} />
                 <Text style={styles.historyText}>
-                  R$ {p.amount.toFixed(2)} — {p.method}
+                  R$ {p.valorPago.toFixed(2)} — {methodLabel(p.meioPagamento)}
                 </Text>
                 <Text style={styles.historyAuth}>Auth: {p.authCode}</Text>
               </View>
@@ -362,6 +392,18 @@ const styles = StyleSheet.create({
   },
   warningText: {
     color: COLORS.GOLD_300, fontSize: FONT_SIZE.SM,
+    fontFamily: FONT_FAMILY.REGULAR, flex: 1,
+  },
+
+  // Parciais já recebidos (tela principal)
+  paidInfo: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 6,
+    backgroundColor: `${COLORS.SUCCESS}11`, borderRadius: 8,
+    borderWidth: 1, borderColor: `${COLORS.SUCCESS}33`,
+    padding: 10, marginBottom: 16, width: '100%',
+  },
+  paidInfoText: {
+    color: COLORS.SUCCESS, fontSize: FONT_SIZE.SM,
     fontFamily: FONT_FAMILY.REGULAR, flex: 1,
   },
 

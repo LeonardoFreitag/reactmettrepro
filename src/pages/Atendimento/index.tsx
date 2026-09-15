@@ -19,7 +19,7 @@ import { ItemModel } from '../../models/ItemModel';
 import { FlavorList } from '../../components/FlavorList';
 import { AlertDialogModal } from '../../components/AlertDialogModal';
 import { MesaDestinoModal } from './MesaDestinoModal';
-import { FechamentoModal } from './FechamentoModal';
+import { FechamentoModal, CieloPagamentoRecord } from './FechamentoModal';
 import { AppStackParamList } from '../../routes';
 import { COLORS, FONT_FAMILY, FONT_SIZE } from '../../theme';
 import { useCieloDeepLink } from '../../hooks/useCieloDeepLink';
@@ -40,6 +40,9 @@ export function Atendimento() {
   const [showDestino, setShowDestino]   = useState(false);
   const [showFechamento, setShowFechamento] = useState(false);
   const [sending, setSending] = useState(false);
+  // Pagamentos Cielo já aprovados para esta comanda (fonte: servidor + os feitos nesta sessão).
+  // É a base para bloquear novas cobranças quando o total já foi recebido.
+  const [cieloPagamentos, setCieloPagamentos] = useState<CieloPagamentoRecord[]>([]);
 
   const { sendPayment, isWaiting: cieloWaiting } = useCieloDeepLink();
 
@@ -54,7 +57,24 @@ export function Atendimento() {
 
   useEffect(() => {
     loadItems();
+    loadCieloPagamentos();
   }, []);
+
+  /**
+   * Carrega do servidor os pagamentos Cielo já registrados para a comanda.
+   * Garante que, ao reabrir uma comanda já recebida (total ou parcialmente),
+   * o app saiba o quanto já foi pago e não permita cobrar de novo.
+   */
+  async function loadCieloPagamentos() {
+    if (!comandaEdit.codigo || !companyEdit.ip) return;
+    try {
+      const api = setUrl(companyEdit.ip, companyEdit.porta);
+      const { data } = await api.get<{ pagamentos: CieloPagamentoRecord[] }>(
+        `/cielo/pagamentos/${Number(comandaEdit.codigo)}`
+      );
+      setCieloPagamentos(data.pagamentos ?? []);
+    } catch {}
+  }
 
   async function loadItems() {
     if (!comandaEdit.codigo || !companyEdit.ip) return;
@@ -163,18 +183,32 @@ export function Atendimento() {
   }
 
   /**
-   * Fecha a comanda no servidor assim que o usuário opta por pagar com Cielo,
-   * antes de seguir com o fluxo de pagamento. Falha silenciosa: não bloqueia o fluxo.
+   * Fechamento da comanda ao final do fluxo Cielo (total pago atingido).
+   * Chamado UMA única vez, com impressão: a solicitação em impressoes_caixa
+   * avisa o caixa de que a conta já foi recebida e ele pode proceder o
+   * recebimento e a emissão da NFC-e.
    */
-  function handleCieloStart() {
-    const api = setUrl(companyEdit.ip, companyEdit.porta);
-    api.post('/mesas/fechaConta', { codigo: comandaEdit.codigo, destino: 'F' }).catch(() => {});
+  async function handleFechamentoCielo() {
+    setShowFechamento(false);
+    try {
+      const api = setUrl(companyEdit.ip, companyEdit.porta);
+      await api.post('/mesas/fechaConta', { codigo: comandaEdit.codigo, destino: 'F' });
+      dispatch(clearItemList());
+      dispatch(clearComandaEdit());
+      navigation.navigate('comandas');
+    } catch {
+      Alert.alert(
+        'Pagamento recebido',
+        'Os pagamentos foram registrados, mas não foi possível enviar o fechamento ao caixa. Verifique a conexão e use "Fechar conta" para tentar novamente.',
+      );
+    }
   }
 
   /**
    * Fluxo Cielo: dispara deep link → aguarda resposta → salva no banco.
    * Retorna { authCode } em caso de sucesso ou null em falha.
-   * Quem decide fechar a conta é o FechamentoModal (quando o total pago for atingido).
+   * Quem decide fechar a conta é o FechamentoModal (quando o total pago for atingido),
+   * chamando onCieloComplete → handleFechamentoCielo.
    */
   async function handleCieloPayment(
     paymentCode: string,
@@ -208,7 +242,23 @@ export function Atendimento() {
       return null;
     }
 
-    return salvarPagamentoCielo(paymentCode, result.data);
+    const saved = await salvarPagamentoCielo(paymentCode, result.data);
+    if (saved) {
+      // Registra localmente (mesmo que o servidor tenha falhado e o operador
+      // tenha escolhido prosseguir) para que o modal contabilize o valor recebido.
+      setCieloPagamentos(prev => [
+        ...prev,
+        {
+          id:            Date.now(),
+          meioPagamento: paymentCode,
+          bandeira:      result.data.payments?.[0]?.brand ?? '',
+          valorPago:     amountCents / 100,
+          authCode:      saved.authCode,
+          nsu:           '',
+        },
+      ]);
+    }
+    return saved;
   }
 
   /**
@@ -453,8 +503,9 @@ export function Atendimento() {
         total={total}
         hasPending={naoImpresso.some(i => i.enviado !== 'S')}
         hasCieloConfig={hasCieloConfig}
+        cieloPagamentos={cieloPagamentos}
         onConfirm={handleFechamento}
-        onCieloStart={handleCieloStart}
+        onCieloComplete={handleFechamentoCielo}
         onCieloPayment={(paymentCode, amountCents) => handleCieloPayment(paymentCode, amountCents)}
         onCancel={() => setShowFechamento(false)}
       />
