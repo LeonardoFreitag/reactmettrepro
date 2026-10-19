@@ -1,5 +1,5 @@
 import { ProdutoEditTypes, ProdutoEditState } from './types';
-const INITIAL_STATE: ProdutoEditState = { data: { codigo: '', nome: '', unidade: '', preco: 0, grupo: '', subgrupo: '', fracionado: '', impressao: '', selected: false } };
+const INITIAL_STATE: ProdutoEditState = { data: { codigo: '', nome: '', unidade: '', preco: 0, grupo: '', subgrupo: '', fracionado: '', impressao: '', selected: false, cobrarServico: 'N' } };
 export default function produtoEditReducer(state = INITIAL_STATE, action: { type: ProdutoEditTypes; payload?: any }): ProdutoEditState {
   switch (action.type) {
     case ProdutoEditTypes.CREATE:
