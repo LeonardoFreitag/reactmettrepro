@@ -13,6 +13,8 @@ import { loadProdutoList } from '../../store/ducks/produtoList/actions';
 import { loadObservacoesList } from '../../store/ducks/observacoesList/actions';
 import { clearItemList } from '../../store/ducks/itemList/actions';
 import { userLoggedClear } from '../../storage/configStorage';
+import { useOutbox } from '../../sync/useOutbox';
+import { useTerminalState } from '../../terminal/useTerminalState';
 import { createAtendenteEdit } from '../../store/ducks/atendenteEdit/actions';
 import { setUrl } from '../../services/api';
 import { ComandaModel } from '../../models/ComandaModel';
@@ -27,6 +29,9 @@ export function Comandas() {
   const companyEdit = useSelector((state: RootState) => state.companyEdit.data);
   const atendenteEdit = useSelector((state: RootState) => state.atendenteEdit.data);
   const comandaList = useSelector((state: RootState) => state.comandaList.data);
+  const configEdit = useSelector((state: RootState) => state.configEdit.data);
+  const outbox = useOutbox();
+  const terminal = useTerminalState();
 
   const [filter, setFilter] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -136,10 +141,36 @@ export function Comandas() {
           <Text style={styles.welcome}>Olá, {atendenteEdit.nome || 'Atendente'}</Text>
           <Text style={styles.subtitle}>Selecione ou crie uma comanda</Text>
         </View>
-        <TouchableOpacity onPress={handleLogout}>
-          <Feather name="log-out" size={24} color={COLORS.DANGER} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          {configEdit.cobrancasAtivas && (
+            <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('cobrancas')}>
+              <Feather name="credit-card" size={22} color={COLORS.CYAN_500} />
+              {outbox.pendentes > 0 && (
+                <View style={styles.headerBadge}><Text style={styles.headerBadgeText}>{outbox.pendentes}</Text></View>
+              )}
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={handleLogout}>
+            <Feather name="log-out" size={24} color={COLORS.DANGER} />
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Toque volta para a tela de plantão: é o caminho de volta quando o operador
+          veio de lá pelo "Abrir comandas" (a lista de comandas não tem botão voltar). */}
+      {configEdit.modoTerminalAtivo && !!configEdit.terminalId && (
+        <TouchableOpacity
+          style={[styles.terminalBar, !terminal.apiOnline && styles.terminalBarOff]}
+          onPress={() => navigation.navigate('terminalEspera')}
+          activeOpacity={0.7}
+        >
+          <Feather name={terminal.apiOnline ? 'radio' : 'wifi-off'} size={13} color={terminal.apiOnline ? COLORS.CYAN_300 : COLORS.GOLD_300} />
+          <Text style={[styles.terminalBarText, !terminal.apiOnline && { color: COLORS.GOLD_300 }]}>
+            Terminal {configEdit.terminalId}{terminal.apiOnline ? ' — aguardando cobranças do caixa' : ' — API: sem conexão'}
+          </Text>
+          <Feather name="chevron-right" size={14} color={terminal.apiOnline ? COLORS.CYAN_300 : COLORS.GOLD_300} />
+        </TouchableOpacity>
+      )}
 
       <View style={styles.searchRow}>
         <TextInput
@@ -191,6 +222,13 @@ export function Comandas() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.BACKGROUND, padding: 16 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 40, marginBottom: 16 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  headerBtn: { padding: 2 },
+  headerBadge: { position: 'absolute', top: -6, right: -10, backgroundColor: COLORS.GOLD_500, borderRadius: 9, minWidth: 18, height: 18, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
+  headerBadgeText: { color: COLORS.BACKGROUND, fontSize: 11, fontFamily: FONT_FAMILY.BOLD },
+  terminalBar: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: `${COLORS.CYAN_700}33`, borderWidth: 1, borderColor: COLORS.CYAN_700, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 12 },
+  terminalBarOff: { backgroundColor: `${COLORS.GOLD_500}22`, borderColor: COLORS.GOLD_700 },
+  terminalBarText: { color: COLORS.CYAN_300, fontSize: 12, flex: 1 },
   welcome: { color: COLORS.WHITE, fontSize: FONT_SIZE.LG, fontFamily: FONT_FAMILY.BOLD },
   subtitle: { color: COLORS.GRAY_400, fontSize: FONT_SIZE.SM },
   searchRow: { flexDirection: 'row', marginBottom: 16, gap: 8 },

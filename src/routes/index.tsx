@@ -13,6 +13,11 @@ import { ProdutosPorGrupo } from '../pages/ListaPorSubgrupo/ProdutosPorGrupo';
 import { ObservacoesPorGrupo } from '../pages/ListaPorSubgrupo/ProdutosPorGrupo/ObservacoesPorGrupo';
 import { GruposDeCombinados } from '../pages/GruposDeCombinados';
 import { ProdutosGrupoCombinado } from '../pages/GruposDeCombinados/ProdutosGrupoCombinado';
+import { Terminal } from '../pages/Terminal';
+import { TerminalEspera } from '../pages/TerminalEspera';
+import { Cobrancas } from '../pages/Cobrancas';
+import { Cobranca } from '../models/CobrancaModel';
+import { navigationRef } from './navigationRef';
 
 export type AppStackParamList = {
   signin: undefined;
@@ -29,13 +34,19 @@ export type AppStackParamList = {
   gruposDeCombinados: undefined;
   produtosGrupoCombinado: undefined;
   editaItemCombinado: undefined;
+  /** Modo "Terminal de pagamento" (attended) — aberto pelo TerminalRunner. */
+  terminal: { cobranca: Cobranca };
+  /** Tela de plantão do Modo Terminal: onde o aparelho dedicado fica parado. */
+  terminalEspera: undefined;
+  /** Cards de cobrança (detached, offline-first). */
+  cobrancas: undefined;
 };
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
 
 export function Routes() {
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="signin">
         <Stack.Screen name="signin" component={SignIn} />
         <Stack.Screen name="configuracoes" component={Configuracoes} />
@@ -48,6 +59,9 @@ export function Routes() {
         <Stack.Screen name="observacoesPorGrupo" component={ObservacoesPorGrupo} />
         <Stack.Screen name="gruposDeCombinados" component={GruposDeCombinados} />
         <Stack.Screen name="produtosGrupoCombinado" component={ProdutosGrupoCombinado} />
+        <Stack.Screen name="terminalEspera" component={TerminalEspera} options={{ gestureEnabled: false }} />
+        <Stack.Screen name="terminal" component={Terminal} options={{ gestureEnabled: false }} />
+        <Stack.Screen name="cobrancas" component={Cobrancas} />
       </Stack.Navigator>
     </NavigationContainer>
   );
