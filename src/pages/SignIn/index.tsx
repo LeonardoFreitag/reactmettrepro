@@ -15,6 +15,8 @@ import { companyGetAll } from '../../storage/companyStorage';
 import { userLoggedSave, userLoggedGet, configGet, configSave } from '../../storage/configStorage';
 import { updateConfigEdit } from '../../store/ducks/configEdit/actions';
 import { AtendenteModel } from '../../models/AtendenteModel';
+import { ConfigModel, normalizeConfig } from '../../models/ConfigModel';
+import { modoTerminalConfigurado } from '../../terminal/ativo';
 
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
@@ -47,7 +49,24 @@ export function SignIn() {
     loadCompanies();
   }, []);
 
+  /**
+   * Destino depois do login. Num aparelho de plantão (Modo Terminal configurado)
+   * é a tela de espera, com `reset` para o botão voltar não cair no login.
+   */
+  function navegarInicio(cfg: ConfigModel | null) {
+    if (modoTerminalConfigurado(cfg)) {
+      navigation.reset({ index: 0, routes: [{ name: 'terminalEspera' }] });
+      return;
+    }
+    navigation.navigate('comandas');
+  }
+
   async function loadCompanies() {
+    // Config local primeiro: garante provider/terminalId/apiKey/cobranças mesmo sem rede
+    // (o merge com o servidor em fetchServerConfig é opcional).
+    const storedConfig = await configGet();
+    if (storedConfig) dispatch(updateConfigEdit(storedConfig));
+
     const companies = await companyGetAll();
     dispatch(loadCompanyList(companies));
     const selected = companies.find(c => c.isSelected) ?? companies[0];
@@ -64,7 +83,7 @@ export function SignIn() {
         nome: userLogged.nome,
         senha: userLogged.senha,
       }));
-      navigation.navigate('comandas');
+      navegarInicio(storedConfig);
     }
   }
 
@@ -79,17 +98,17 @@ export function SignIn() {
         perServico: number;
       }>('/config');
 
-      // Merge com config local (preserva ip, destino, keyboardHasLetters)
+      // Merge com config local (preserva ip, destino, keyboardHasLetters e os
+      // campos de maquineta: provider, terminalId, apiKey, modoTerminalAtivo, cobrancasAtivas)
       const stored = await configGet();
-      const updated = {
+      const updated = normalizeConfig({
+        ...(stored ?? {}),
         ip: stored?.ip ?? ip,
-        destino: stored?.destino ?? false,
-        keyboardHasLetters: stored?.keyboardHasLetters ?? false,
         cieloClientId:    data.cieloClientId    ?? stored?.cieloClientId    ?? '',
         cieloAccessToken: data.cieloAccessToken ?? stored?.cieloAccessToken ?? '',
         cobrServico:      data.cobrServico      ?? stored?.cobrServico      ?? 'N',
         perServico:       data.perServico        ?? stored?.perServico       ?? 0,
-      };
+      });
       dispatch(updateConfigEdit(updated));
       await configSave(updated);
     } catch {
@@ -123,7 +142,7 @@ export function SignIn() {
 
       await userLoggedSave({ ...atendente, isLogged: true });
       dispatch(createAtendenteEdit(atendente));
-      navigation.navigate('comandas');
+      navegarInicio(configEdit);
     } catch (err: any) {
       const url = `http://${companyEdit.ip}:${companyEdit.porta}/func`;
       const detail = err?.message ?? err?.code ?? 'Erro desconhecido';

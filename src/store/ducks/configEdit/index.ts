@@ -1,15 +1,8 @@
 import { ConfigEditTypes, ConfigEditState } from './types';
+import { CONFIG_DEFAULTS, normalizeConfig } from '../../../models/ConfigModel';
 
 const INITIAL_STATE: ConfigEditState = {
-  data: {
-    ip: '',
-    destino: false,
-    keyboardHasLetters: false,
-    cieloClientId: '',
-    cieloAccessToken: '',
-    cobrServico: 'N',
-    perServico: 0,
-  },
+  data: { ...CONFIG_DEFAULTS },
 };
 
 export default function configEditReducer(
@@ -19,7 +12,7 @@ export default function configEditReducer(
   switch (action.type) {
     case ConfigEditTypes.CREATE:
     case ConfigEditTypes.UPDATE:
-      return { data: action.payload };
+      return { data: normalizeConfig(action.payload) };
     case ConfigEditTypes.CLEAR:
       return INITIAL_STATE;
     default:

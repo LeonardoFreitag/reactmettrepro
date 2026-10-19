@@ -14,6 +14,7 @@ import { updateConfigEdit } from '../../store/ducks/configEdit/actions';
 import { companyGetAll, companyDelete } from '../../storage/companyStorage';
 import { configSave } from '../../storage/configStorage';
 import { CompanyModel } from '../../models/CompanyModel';
+import { ConfigModel, PaymentProviderName } from '../../models/ConfigModel';
 import { AlertDialogModal } from '../../components/AlertDialogModal';
 import { AddCompanyModal } from './AddCompanyModal';
 import { COLORS, FONT_FAMILY, FONT_SIZE } from '../../theme';
@@ -38,9 +39,21 @@ export function Configuracoes() {
 
   const hasCieloCredentials = !!(configEdit.cieloClientId && configEdit.cieloAccessToken);
 
+  // Campos Maquineta / cobranças (locais até salvar)
+  const [terminalId, setTerminalId] = useState(configEdit.terminalId ?? '');
+  const [apiKey, setApiKey] = useState(configEdit.apiKey ?? '');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const isStone = configEdit.provider === 'STONE';
+
   useEffect(() => {
     companyGetAll().then(list => dispatch(loadCompanyList(list)));
   }, []);
+
+  // Acompanha a config vinda do storage/servidor (a tela pode abrir antes do configGet do SignIn).
+  useEffect(() => {
+    setTerminalId(configEdit.terminalId ?? '');
+    setApiKey(configEdit.apiKey ?? '');
+  }, [configEdit.terminalId, configEdit.apiKey]);
 
   async function handleToggleDestino(value: boolean) {
     const updated = { ...configEdit, destino: value };
@@ -52,6 +65,40 @@ export function Configuracoes() {
     const updated = { ...configEdit, keyboardHasLetters: value };
     dispatch(updateConfigEdit(updated));
     await configSave(updated);
+  }
+
+  async function handleSelectProvider(provider: PaymentProviderName) {
+    const updated: ConfigModel = { ...configEdit, provider };
+    dispatch(updateConfigEdit(updated));
+    await configSave(updated);
+  }
+
+  async function handleToggleModoTerminal(value: boolean) {
+    if (value && !terminalId.trim()) {
+      Alert.alert('Terminal', 'Informe o identificador desta maquineta antes de ligar o modo Terminal.');
+      return;
+    }
+    // Grava também os campos digitados, para o toggle não ficar "ligado" com Terminal ID vazio.
+    const updated: ConfigModel = { ...configEdit, modoTerminalAtivo: value, terminalId: terminalId.trim(), apiKey: apiKey.trim() };
+    dispatch(updateConfigEdit(updated));
+    await configSave(updated);
+  }
+
+  async function handleToggleCobrancas(value: boolean) {
+    const updated: ConfigModel = { ...configEdit, cobrancasAtivas: value };
+    dispatch(updateConfigEdit(updated));
+    await configSave(updated);
+  }
+
+  async function handleSaveTerminal() {
+    const updated: ConfigModel = {
+      ...configEdit,
+      terminalId: terminalId.trim(),
+      apiKey: apiKey.trim(),
+    };
+    dispatch(updateConfigEdit(updated));
+    await configSave(updated);
+    Alert.alert('Maquineta', 'Configurações da maquineta salvas.');
   }
 
   async function handleSaveCielo() {
@@ -131,10 +178,88 @@ export function Configuracoes() {
         />
       </View>
 
-      {/* Integração Cielo Smart */}
-      <Text style={styles.sectionTitle}>Integração Cielo Smart</Text>
+      {/* Maquineta (provedor por aparelho + cobranças) */}
+      <Text style={styles.sectionTitle}>Maquineta</Text>
+      <View style={styles.cieloManualCard}>
+        <Text style={styles.fieldLabel}>Provedor de pagamento deste aparelho</Text>
+        <View style={styles.providerRow}>
+          {(['CIELO', 'STONE'] as PaymentProviderName[]).map(p => {
+            const on = configEdit.provider === p;
+            return (
+              <TouchableOpacity key={p} style={[styles.providerChip, on && styles.providerChipOn]} onPress={() => handleSelectProvider(p)}>
+                <Feather name={on ? 'check-circle' : 'circle'} size={16} color={on ? COLORS.CYAN_300 : COLORS.GRAY_400} />
+                <Text style={[styles.providerChipText, on && styles.providerChipTextOn]}>{p === 'CIELO' ? 'Cielo Smart' : 'Stone SmartPOS'}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        {isStone && (
+          <Text style={styles.hint}>Stone: sem credenciais no app (Deeplink payment-app:// e cancel-app://). Requer este app instalado numa SmartPOS Stone.</Text>
+        )}
 
-      {hasCieloCredentials ? (
+        <Text style={styles.fieldLabel}>Identificador desta maquineta (Terminal ID)</Text>
+        <TextInput
+          style={styles.input}
+          value={terminalId}
+          onChangeText={setTerminalId}
+          placeholder="Ex: T1 — o caixa configura o mesmo valor no PDV"
+          placeholderTextColor={COLORS.GRAY_400}
+          autoCapitalize="characters"
+          autoCorrect={false}
+        />
+
+        <Text style={styles.fieldLabel}>Chave da API (X-Api-Key)</Text>
+        <View style={styles.inputRow}>
+          <TextInput
+            style={[styles.input, { flex: 1 }]}
+            value={apiKey}
+            onChangeText={setApiKey}
+            placeholder="Vazio = não envia"
+            placeholderTextColor={COLORS.GRAY_400}
+            secureTextEntry={!showApiKey}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowApiKey(v => !v)}>
+            <Feather name={showApiKey ? 'eye-off' : 'eye'} size={18} color={COLORS.GRAY_400} />
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity style={styles.btn} onPress={handleSaveTerminal}>
+          <Feather name="save" size={16} color={COLORS.BACKGROUND} />
+          <Text style={styles.btnText}>Salvar maquineta</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.optionRow}>
+        <View style={{ flex: 1, marginRight: 8 }}>
+          <Text style={styles.optionLabel}>Modo "Terminal de pagamento"</Text>
+          <Text style={styles.hintSmall}>O caixa lança o valor no PDV e esta maquineta cobra sozinha (balcão / mesa fechada no caixa).</Text>
+        </View>
+        <Switch
+          value={configEdit.modoTerminalAtivo}
+          onValueChange={handleToggleModoTerminal}
+          thumbColor={COLORS.GOLD_500}
+          trackColor={{ true: COLORS.GOLD_700, false: COLORS.SURFACE_600 }}
+        />
+      </View>
+      <View style={styles.optionRow}>
+        <View style={{ flex: 1, marginRight: 8 }}>
+          <Text style={styles.optionLabel}>Tela "Cobranças"</Text>
+          <Text style={styles.hintSmall}>Cards de entrega (do funcionário logado) e de mesas, com funcionamento sem rede.</Text>
+        </View>
+        <Switch
+          value={configEdit.cobrancasAtivas}
+          onValueChange={handleToggleCobrancas}
+          thumbColor={COLORS.GOLD_500}
+          trackColor={{ true: COLORS.GOLD_700, false: COLORS.SURFACE_600 }}
+        />
+      </View>
+
+      {/* Integração Cielo Smart (só com provider = CIELO) */}
+      {!isStone && <Text style={styles.sectionTitle}>Integração Cielo Smart</Text>}
+
+      {isStone ? null : hasCieloCredentials ? (
         <View style={styles.cieloSuccessCard}>
           <View style={styles.cieloHeader}>
             <Feather name="check-circle" size={18} color={COLORS.SUCCESS} />
@@ -166,7 +291,7 @@ export function Configuracoes() {
         </View>
       )}
 
-      {(!hasCieloCredentials || showManualCielo) && (
+      {!isStone && (!hasCieloCredentials || showManualCielo) && (
         <View style={styles.cieloManualCard}>
           <Text style={styles.fieldLabel}>Client-ID</Text>
           <TextInput
@@ -289,6 +414,13 @@ const styles = StyleSheet.create({
   },
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   eyeBtn: { padding: 10, backgroundColor: COLORS.SURFACE_600, borderRadius: 8 },
+  providerRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  providerChip: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: 8, backgroundColor: COLORS.SURFACE_600, borderWidth: 1, borderColor: COLORS.SURFACE_600 },
+  providerChipOn: { backgroundColor: `${COLORS.CYAN_700}44`, borderColor: COLORS.CYAN_500 },
+  providerChipText: { color: COLORS.GRAY_100, fontSize: FONT_SIZE.SM },
+  providerChipTextOn: { color: COLORS.WHITE, fontFamily: FONT_FAMILY.BOLD },
+  hint: { color: COLORS.GRAY_400, fontSize: 12, marginBottom: 12 },
+  hintSmall: { color: COLORS.GRAY_400, fontSize: 11, marginTop: 2 },
   btn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 8, backgroundColor: COLORS.CYAN_700, borderRadius: 8,

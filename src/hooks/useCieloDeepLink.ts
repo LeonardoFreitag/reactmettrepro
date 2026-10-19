@@ -12,6 +12,9 @@ import {
 const URL_CALLBACK    = 'order://response';
 const CIELO_PAYMENT_URI = 'lio://payment';
 const CIELO_PRINT_URI   = 'lio://print';
+// Cancelamento/estorno (Order Manager URI): request = { accessToken, clientID, id, authCode, cieloCode }
+// Referência: github.com/matheus-caldeira/cielo_sample (Payment.java, CANCEL = "payment-reversal").
+const CIELO_REVERSAL_URI = 'lio://payment-reversal';
 
 export type CieloResult =
   | { success: true;  data: CieloPaymentResponse }
@@ -94,6 +97,7 @@ export function useCieloDeepLink() {
    * @param params.items        Itens do pedido
    * @param params.paymentCode  Meio de pagamento (ex: "CREDITO_AVISTA")
    * @param params.reference    Referência do pedido (opcional)
+   * @param params.installments Nº de parcelas (opcional; 0/ausente = a Cielo pergunta — comportamento original)
    */
   const sendPayment = useCallback(async (params: {
     accessToken: string;
@@ -107,12 +111,13 @@ export function useCieloDeepLink() {
     }>;
     paymentCode: string;
     reference?: string;
+    installments?: number;
   }): Promise<CieloResult> => {
     const request: CieloPaymentRequest = {
       accessToken:  params.accessToken,
       clientID:     params.clientID,
       reference:    params.reference ?? '',
-      installments: 0,
+      installments: params.installments ?? 0,
       items: params.items.map(it => ({
         name:          it.name,
         quantity:      it.quantity,
@@ -168,6 +173,44 @@ export function useCieloDeepLink() {
   }, []);
 
   /**
+   * Estorna (cancela) um pagamento já aprovado via Deep Link `lio://payment-reversal`.
+   * Reaproveita o mesmo listener de `order://response`.
+   *
+   * @param params.id         id da ordem Cielo (CIELO_PAGAMENTOS.CIELO_ORDER_ID)
+   * @param params.authCode   código de autorização do pagamento
+   * @param params.cieloCode  cieloCode do pagamento
+   */
+  const sendReversal = useCallback(async (params: {
+    accessToken: string;
+    clientID: string;
+    id: string;
+    authCode: string;
+    cieloCode: string;
+  }): Promise<CieloResult> => {
+    const request = {
+      accessToken: params.accessToken,
+      clientID:    params.clientID,
+      id:          params.id,
+      authCode:    params.authCode,
+      cieloCode:   params.cieloCode,
+    };
+    const base64 = encodeBase64(JSON.stringify(request));
+    const uri = `${CIELO_REVERSAL_URI}?request=${base64}&urlCallback=${URL_CALLBACK}`;
+
+    setIsWaiting(true);
+
+    return new Promise<CieloResult>(resolve => {
+      resolveRef.current = resolve;
+      Linking.openURL(uri).catch(() => {
+        settle({
+          success: false,
+          error: 'Não foi possível abrir o aplicativo Cielo para o estorno.',
+        });
+      });
+    });
+  }, []);
+
+  /**
    * Cancela a espera por uma resposta da Cielo (ex: usuário voltou sem pagar).
    */
   const cancelWait = useCallback(() => {
@@ -176,5 +219,5 @@ export function useCieloDeepLink() {
     }
   }, []);
 
-  return { sendPayment, printText, cancelWait, isWaiting };
+  return { sendPayment, sendReversal, printText, cancelWait, isWaiting };
 }
