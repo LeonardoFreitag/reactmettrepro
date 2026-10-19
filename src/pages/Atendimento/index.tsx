@@ -19,10 +19,11 @@ import { ItemModel } from '../../models/ItemModel';
 import { FlavorList } from '../../components/FlavorList';
 import { AlertDialogModal } from '../../components/AlertDialogModal';
 import { MesaDestinoModal } from './MesaDestinoModal';
-import { FechamentoModal, CieloPagamentoRecord } from './FechamentoModal';
+import { FechamentoModal, PagoPorItem, SelecaoItem } from './FechamentoModal';
+import { PagamentoRecord, ItemPagoRecord } from '../../models/CobrancaModel';
 import { AppStackParamList } from '../../routes';
 import { COLORS, FONT_FAMILY, FONT_SIZE } from '../../theme';
-import { useCieloDeepLink } from '../../hooks/useCieloDeepLink';
+import { usePaymentProvider, PaymentMethodOption } from '../../payment';
 
 type Nav = NativeStackNavigationProp<AppStackParamList, 'atendimento'>;
 
@@ -40,11 +41,16 @@ export function Atendimento() {
   const [showDestino, setShowDestino]   = useState(false);
   const [showFechamento, setShowFechamento] = useState(false);
   const [sending, setSending] = useState(false);
-  // Pagamentos Cielo já aprovados para esta comanda (fonte: servidor + os feitos nesta sessão).
+  // Pagamentos já aprovados na maquineta para esta comanda (fonte: servidor + os feitos nesta sessão).
   // É a base para bloquear novas cobranças quando o total já foi recebido.
-  const [cieloPagamentos, setCieloPagamentos] = useState<CieloPagamentoRecord[]>([]);
+  const [cieloPagamentos, setCieloPagamentos] = useState<PagamentoRecord[]>([]);
+  // Quanto de cada item já foi cobrado na maquineta (item.codigo → {qtde, valor}).
+  // Fonte: servidor (GET /pagamentos → itensPagos) + pagamentos feitos nesta sessão.
+  const [pagoPorItem, setPagoPorItem] = useState<PagoPorItem>({});
 
-  const { sendPayment, isWaiting: cieloWaiting } = useCieloDeepLink();
+  // Provedor de pagamento deste aparelho (Cielo hoje; Stone na Etapa B) — interface única.
+  const provider = usePaymentProvider();
+  const cieloWaiting = provider.isWaiting;
 
   // Ref para itens pendentes — evita closure stale entre setPendingItems e sendItems
   const pendingRef = useRef<ItemModel[]>([]);
@@ -61,7 +67,7 @@ export function Atendimento() {
   }, []);
 
   /**
-   * Carrega do servidor os pagamentos Cielo já registrados para a comanda.
+   * Carrega do servidor os pagamentos de maquineta já registrados para a comanda.
    * Garante que, ao reabrir uma comanda já recebida (total ou parcialmente),
    * o app saiba o quanto já foi pago e não permita cobrar de novo.
    */
@@ -69,10 +75,18 @@ export function Atendimento() {
     if (!comandaEdit.codigo || !companyEdit.ip) return;
     try {
       const api = setUrl(companyEdit.ip, companyEdit.porta);
-      const { data } = await api.get<{ pagamentos: CieloPagamentoRecord[] }>(
-        `/cielo/pagamentos/${Number(comandaEdit.codigo)}`
+      const { data } = await api.get<{ pagamentos: PagamentoRecord[]; itensPagos?: ItemPagoRecord[] }>(
+        `/pagamentos/M/${Number(comandaEdit.codigo)}`
       );
       setCieloPagamentos(data.pagamentos ?? []);
+      // Reconstrói a marcação por item (servidor desatualizado → itensPagos ausente → mantém o local).
+      if (Array.isArray(data.itensPagos)) {
+        const next: PagoPorItem = {};
+        data.itensPagos.forEach(ip => {
+          next[String(ip.codItem)] = { qtde: Number(ip.qtde) || 0, valor: Number(ip.valor) || 0 };
+        });
+        setPagoPorItem(next);
+      }
     } catch {}
   }
 
@@ -135,6 +149,14 @@ export function Atendimento() {
       const payload = buildPayload(items, destino);
       await api.put('/itens', payload);
       items.forEach(item => dispatch(updateItemList({ ...item, enviado: 'S' })));
+      // Recarrega para obter o CODIGO (MESAS_ITENS) dos itens recém-enviados —
+      // é a chave usada na seleção de itens para cobrança. O ref é atualizado
+      // antes para que loadItems não trate os recém-enviados como pendentes.
+      const sentIds = new Set(items.map(i => i.mobileId));
+      itemListRef.current = itemListRef.current.map(i =>
+        sentIds.has(i.mobileId) ? { ...i, enviado: 'S' } : i
+      );
+      await loadItems();
     } catch {
       Alert.alert('Erro', 'Não foi possível enviar os itens.');
     } finally {
@@ -183,7 +205,7 @@ export function Atendimento() {
   }
 
   /**
-   * Fechamento da comanda ao final do fluxo Cielo (total pago atingido).
+   * Fechamento da comanda ao final do fluxo de maquineta (total pago atingido).
    * Chamado UMA única vez, com impressão: a solicitação em impressoes_caixa
    * avisa o caixa de que a conta já foi recebida e ele pode proceder o
    * recebimento e a emissão da NFC-e.
@@ -205,14 +227,15 @@ export function Atendimento() {
   }
 
   /**
-   * Fluxo Cielo: dispara deep link → aguarda resposta → salva no banco.
+   * Fluxo de maquineta: provider.pay (Deep Link) → aguarda resposta → salva no banco.
    * Retorna { authCode } em caso de sucesso ou null em falha.
    * Quem decide fechar a conta é o FechamentoModal (quando o total pago for atingido),
    * chamando onCieloComplete → handleFechamentoCielo.
    */
   async function handleCieloPayment(
-    paymentCode: string,
+    method: PaymentMethodOption,
     amountCents: number,
+    selecao: SelecaoItem[] = [],
   ): Promise<{ authCode: string } | null> {
     const cieloItems = itemList.map(item => {
       const qty = Math.round(item.quantidade);
@@ -228,13 +251,13 @@ export function Atendimento() {
       };
     });
 
-    const result = await sendPayment({
-      accessToken: configEdit.cieloAccessToken,
-      clientID:    configEdit.cieloClientId,
-      totalCents:  amountCents,
-      items:       cieloItems,
-      paymentCode,
-      reference:   `Comanda ${comandaEdit.comanda}`,
+    const result = await provider.pay({
+      amountCents,
+      transactionType: method.transactionType,
+      installments:    method.installments,
+      voucherKind:     method.voucherKind,
+      items:           cieloItems,
+      reference:       `Comanda ${comandaEdit.comanda}`,
     });
 
     if (!result.success) {
@@ -242,19 +265,36 @@ export function Atendimento() {
       return null;
     }
 
-    const saved = await salvarPagamentoCielo(paymentCode, result.data);
+    const saved = await salvarPagamentoCielo(result, amountCents, total, selecao);
     if (saved) {
+      // Marca os itens selecionados como pagos (acumula por item). Mantido
+      // localmente mesmo se o servidor falhou e o operador escolheu prosseguir.
+      if (selecao.length) {
+        setPagoPorItem(prev => {
+          const next = { ...prev };
+          selecao.forEach(({ codigo, qtde, valor }) => {
+            const cur = next[codigo] ?? { qtde: 0, valor: 0 };
+            next[codigo] = {
+              qtde:  cur.qtde + qtde,
+              valor: Math.round((cur.valor + valor) * 100) / 100,
+            };
+          });
+          return next;
+        });
+      }
       // Registra localmente (mesmo que o servidor tenha falhado e o operador
       // tenha escolhido prosseguir) para que o modal contabilize o valor recebido.
       setCieloPagamentos(prev => [
         ...prev,
         {
-          id:            Date.now(),
-          meioPagamento: paymentCode,
-          bandeira:      result.data.payments?.[0]?.brand ?? '',
-          valorPago:     amountCents / 100,
-          authCode:      saved.authCode,
-          nsu:           '',
+          id:              Date.now(),
+          provider:        provider.name,
+          transactionType: result.transactionType,
+          meioPagamento:   String(result.providerData.paymentCode ?? result.transactionType),
+          bandeira:        result.brand,
+          valorPago:       amountCents / 100,
+          authCode:        saved.authCode,
+          nsu:             result.nsu,
         },
       ]);
     }
@@ -262,33 +302,54 @@ export function Atendimento() {
   }
 
   /**
-   * Persiste os dados do pagamento Cielo na API (Firebird).
-   * Falha não-bloqueante: pagamento já aprovado na Cielo.
+   * Persiste os dados do pagamento na API (Firebird) — POST /pagamentos.
+   * Falha não-bloqueante: pagamento já aprovado na maquineta.
    * Retorna authCode em caso de sucesso ou após o operador escolher prosseguir.
    */
   async function salvarPagamentoCielo(
-    paymentCode: string,
-    cieloResponse: any,
+    pago: Extract<Awaited<ReturnType<typeof provider.pay>>, { success: true }>,
+    amountCents: number,
+    totalConta: number,
+    selecao: SelecaoItem[] = [],
   ): Promise<{ authCode: string } | null> {
-    const authCode = cieloResponse.payments?.[0]?.authCode ?? '-';
+    const authCode = pago.authCode || '-';
 
     try {
       const api = setUrl(companyEdit.ip, companyEdit.porta);
-      await api.post('/cielo/pagamento', {
-        codMesa:       Number(comandaEdit.codigo),
-        paymentCode,
-        cieloResponse,
+      await api.post('/pagamentos', {
+        provider:        provider.name,
+        origem:          'M',
+        codVenda:        Number(comandaEdit.codigo),
+        transactionType: pago.transactionType,
+        installments:    Math.max(pago.installments, 1),
+        amountCents,
+        totalCents:      Math.round(totalConta * 100),
+        providerData:    pago.providerData,
+        rawResponse:     pago.rawResponse,
+        // Itens cobertos por esta cobrança (persistidos em CIELO_PAGAMENTOS_ITENS)
+        itens: selecao.length
+          ? selecao.map(s => ({
+              codItem:    Number(s.codigo),
+              codConjuga: s.codConjuga,
+              qtde:       s.qtde,
+              valor:      s.valor,
+            }))
+          : undefined,
       });
       return { authCode };
-    } catch {
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const detalhe = status === 401 ? ' (chave da API inválida — confira em Configurações > Maquineta)'
+        : status === 404 ? ' (servidor desatualizado: rota /pagamentos ausente)'
+        : status ? ` (HTTP ${status})` : '';
       return new Promise(resolve => {
         Alert.alert(
           'Pagamento aprovado',
-          `Autorização: ${authCode}\n\nAtenção: não foi possível registrar no servidor. Anote o código e registre manualmente.`,
+          `Autorização: ${authCode}\n\nAtenção: não foi possível registrar no servidor${detalhe}. Anote o código e registre manualmente.`,
           [
             {
               text: 'Tentar novamente',
-              onPress: async () => resolve(await salvarPagamentoCielo(paymentCode, cieloResponse)),
+              onPress: async () => resolve(await salvarPagamentoCielo(pago, amountCents, totalConta, selecao)),
             },
             {
               text: 'Prosseguir assim mesmo',
@@ -327,7 +388,7 @@ export function Atendimento() {
   const total         = totalProdutos + totalServico;
   const impresso    = itemList.filter(i => i.impresso?.trim() === 'S');
   const naoImpresso = itemList.filter(i => i.impresso?.trim() !== 'S');
-  const hasCieloConfig = !!(configEdit.cieloClientId && configEdit.cieloAccessToken);
+  const hasCieloConfig = provider.isConfigured();
 
   function renderItem({ item }: { item: ItemModel }) {
     const sent = item.enviado?.trim() === 'S';
@@ -401,11 +462,11 @@ export function Atendimento() {
         </View>
       </View>
 
-      {/* Indicador Cielo aguardando retorno */}
+      {/* Indicador: aguardando retorno da maquineta */}
       {cieloWaiting && (
         <View style={styles.cieloBanner}>
           <ActivityIndicator size="small" color={COLORS.CYAN_300} />
-          <Text style={styles.cieloBannerText}>Aguardando retorno da Cielo...</Text>
+          <Text style={styles.cieloBannerText}>Aguardando retorno da maquineta...</Text>
         </View>
       )}
 
@@ -504,9 +565,11 @@ export function Atendimento() {
         hasPending={naoImpresso.some(i => i.enviado !== 'S')}
         hasCieloConfig={hasCieloConfig}
         cieloPagamentos={cieloPagamentos}
+        items={itemList.filter(i => i.enviado?.trim() === 'S' && Number(i.codigo) > 0)}
+        pagoPorItem={pagoPorItem}
         onConfirm={handleFechamento}
         onCieloComplete={handleFechamentoCielo}
-        onCieloPayment={(paymentCode, amountCents) => handleCieloPayment(paymentCode, amountCents)}
+        onCieloPayment={(method, amountCents, selecao) => handleCieloPayment(method, amountCents, selecao)}
         onCancel={() => setShowFechamento(false)}
       />
     </View>
