@@ -10,6 +10,12 @@ import { Routes } from './src/routes';
 import { TerminalRunner } from './src/terminal/TerminalRunner';
 import { TerminalPausadoBanner } from './src/components/TerminalPausadoBanner';
 import { startDrainer } from './src/sync/outbox';
+import { startInbox } from './src/payment/deepLinkInbox';
+import { PendingRecovery } from './src/payment/PendingRecovery';
+
+// Inbox das respostas de Deep Link da maquineta: liga ANTES do primeiro render para
+// não perder o `url` nem a URL inicial (cold start) enquanto as fontes carregam.
+void startInbox();
 
 export default function App() {
   const [fontsLoaded] = useFonts({ Roboto_400Regular, Roboto_700Bold });
@@ -29,6 +35,7 @@ export default function App() {
             <Routes />
           </View>
           <TerminalRunner />
+          <PendingRecovery />
         </AppProvider>
       </Provider>
     </SafeAreaProvider>

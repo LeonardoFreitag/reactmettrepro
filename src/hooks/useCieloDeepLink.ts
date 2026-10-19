@@ -1,92 +1,53 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Linking } from 'react-native';
-import { encodeBase64, decodeBase64 } from '../utils/base64';
-import {
-  CieloPaymentRequest,
-  CieloPaymentResponse,
-  CieloPaymentError,
-} from '../models/CieloModel';
+import { encodeBase64 } from '../utils/base64';
+import { CieloPaymentRequest } from '../models/CieloModel';
+import { CIELO_CALLBACK_URL, CieloResult } from '../payment/cieloCallback';
+import { registerWaiter } from '../payment/deepLinkInbox';
+
+export type { CieloResult };
 
 // O scheme registrado em app.json ("order") define o contrato de callback.
 // A Cielo Smart retorna: order://response?response=<base64>&responsecode=<code>
-const URL_CALLBACK    = 'order://response';
+// Quem escuta a URL é o inbox global (payment/deepLinkInbox.ts) — inclusive no
+// cold start via Linking.getInitialURL(); este hook só registra quem espera.
+const URL_CALLBACK      = CIELO_CALLBACK_URL;
 const CIELO_PAYMENT_URI = 'lio://payment';
 const CIELO_PRINT_URI   = 'lio://print';
 // Cancelamento/estorno (Order Manager URI): request = { accessToken, clientID, id, authCode, cieloCode }
 // Referência: github.com/matheus-caldeira/cielo_sample (Payment.java, CANCEL = "payment-reversal").
 const CIELO_REVERSAL_URI = 'lio://payment-reversal';
 
-export type CieloResult =
-  | { success: true;  data: CieloPaymentResponse }
-  | { success: false; error: string; errorCode?: number };
-
 export function useCieloDeepLink() {
   const [isWaiting, setIsWaiting] = useState(false);
-  // Guardamos o resolve da Promise para chamar ao receber o callback
-  const resolveRef = useRef<((r: CieloResult) => void) | null>(null);
+  // Resolve da Promise em andamento (cancelWait) e unregister do waiter no inbox.
+  const settleRef = useRef<((r: CieloResult) => void) | null>(null);
+  const unregisterRef = useRef<(() => void) | null>(null);
 
-  useEffect(() => {
-    const subscription = Linking.addEventListener('url', handleDeepLinkUrl);
-    return () => subscription.remove();
+  // Ao desmontar, solta o waiter: se a resposta chegar depois, o inbox grava
+  // o pagamento sozinho (pendente persistido) em vez de entregá-la a ninguém.
+  useEffect(() => () => {
+    unregisterRef.current?.();
+    unregisterRef.current = null;
+    settleRef.current = null;
   }, []);
 
-  function handleDeepLinkUrl({ url }: { url: string }) {
-    if (!url.startsWith('order://response')) return;
-
-    try {
-      const [, queryString] = url.split('?');
-      const params: Record<string, string> = {};
-      queryString?.split('&').forEach(pair => {
-        const eqIdx = pair.indexOf('=');
-        if (eqIdx === -1) return;
-        const k = pair.substring(0, eqIdx);
-        const v = pair.substring(eqIdx + 1);
-        if (k) params[k] = decodeURIComponent(v);
-      });
-
-      const responseB64 = params['response'];
-      if (!responseB64) {
-        settle({ success: false, error: 'Resposta inválida da Cielo.' });
-        return;
-      }
-
-      let json: string;
-      try {
-        // Emulador retorna base64 com quebras de linha (MIME wrap) — remover antes de decodificar
-        const cleanB64 = responseB64.replace(/\s+/g, '');
-        json = decodeBase64(cleanB64);
-      } catch {
-        settle({ success: false, error: 'Erro ao decodificar resposta da Cielo.' });
-        return;
-      }
-
-      let parsed: any;
-      try {
-        parsed = JSON.parse(json);
-      } catch {
-        settle({ success: false, error: 'Erro ao interpretar JSON da Cielo.' });
-        return;
-      }
-
-      if (typeof parsed.code === 'number') {
-        const err = parsed as CieloPaymentError;
-        settle({ success: false, error: err.reason, errorCode: err.code });
-        return;
-      }
-
-      settle({ success: true, data: parsed as CieloPaymentResponse });
-    } catch {
-      settle({ success: false, error: 'Erro ao processar retorno da Cielo.' });
-    }
-  }
-
-  function settle(result: CieloResult) {
-    setIsWaiting(false);
-    if (resolveRef.current) {
-      resolveRef.current(result);
-      resolveRef.current = null;
-    }
-  }
+  const open = useCallback((uri: string, openError: string): Promise<CieloResult> => {
+    setIsWaiting(true);
+    return new Promise<CieloResult>(resolve => {
+      const settle = (r: CieloResult) => {
+        if (settleRef.current !== settle) return; // já resolvida / substituída
+        settleRef.current = null;
+        unregisterRef.current?.();
+        unregisterRef.current = null;
+        setIsWaiting(false);
+        resolve(r);
+      };
+      settleRef.current = settle;
+      unregisterRef.current = registerWaiter({ provider: 'CIELO', resolve: settle });
+      Linking.openURL(uri).catch(() => settle({ success: false, error: openError }));
+    });
+  }, []);
 
   /**
    * Inicia um pagamento via Deep Link na Cielo Smart.
@@ -96,7 +57,8 @@ export function useCieloDeepLink() {
    * @param params.totalCents   Valor total em centavos (ex: 1000 = R$10,00)
    * @param params.items        Itens do pedido
    * @param params.paymentCode  Meio de pagamento (ex: "CREDITO_AVISTA")
-   * @param params.reference    Referência do pedido (opcional)
+   * @param params.reference    Referência do pedido — a Cielo a ecoa na resposta
+   *                            (usada para casar com o pagamento pendente)
    * @param params.installments Nº de parcelas (opcional; 0/ausente = a Cielo pergunta — comportamento original)
    */
   const sendPayment = useCallback(async (params: {
@@ -131,19 +93,8 @@ export function useCieloDeepLink() {
 
     const base64 = encodeBase64(JSON.stringify(request));
     const uri = `${CIELO_PAYMENT_URI}?request=${base64}&urlCallback=${URL_CALLBACK}`;
-
-    setIsWaiting(true);
-
-    return new Promise<CieloResult>(resolve => {
-      resolveRef.current = resolve;
-      Linking.openURL(uri).catch(() => {
-        settle({
-          success: false,
-          error: 'Não foi possível abrir o aplicativo Cielo. Verifique se a Cielo Smart está instalada neste dispositivo.',
-        });
-      });
-    });
-  }, []);
+    return open(uri, 'Não foi possível abrir o aplicativo Cielo. Verifique se a Cielo Smart está instalada neste dispositivo.');
+  }, [open]);
 
   /**
    * Imprime texto na impressora térmica da Cielo Smart via Deep Link.
@@ -158,23 +109,12 @@ export function useCieloDeepLink() {
     };
     const base64 = encodeBase64(JSON.stringify(request));
     const uri = `${CIELO_PRINT_URI}?request=${base64}&urlCallback=${URL_CALLBACK}`;
-
-    setIsWaiting(true);
-
-    return new Promise<CieloResult>(resolve => {
-      resolveRef.current = resolve;
-      Linking.openURL(uri).catch(() => {
-        settle({
-          success: false,
-          error: 'Não foi possível acionar a impressora Cielo.',
-        });
-      });
-    });
-  }, []);
+    return open(uri, 'Não foi possível acionar a impressora Cielo.');
+  }, [open]);
 
   /**
    * Estorna (cancela) um pagamento já aprovado via Deep Link `lio://payment-reversal`.
-   * Reaproveita o mesmo listener de `order://response`.
+   * Reaproveita o mesmo callback `order://response`.
    *
    * @param params.id         id da ordem Cielo (CIELO_PAGAMENTOS.CIELO_ORDER_ID)
    * @param params.authCode   código de autorização do pagamento
@@ -196,27 +136,14 @@ export function useCieloDeepLink() {
     };
     const base64 = encodeBase64(JSON.stringify(request));
     const uri = `${CIELO_REVERSAL_URI}?request=${base64}&urlCallback=${URL_CALLBACK}`;
-
-    setIsWaiting(true);
-
-    return new Promise<CieloResult>(resolve => {
-      resolveRef.current = resolve;
-      Linking.openURL(uri).catch(() => {
-        settle({
-          success: false,
-          error: 'Não foi possível abrir o aplicativo Cielo para o estorno.',
-        });
-      });
-    });
-  }, []);
+    return open(uri, 'Não foi possível abrir o aplicativo Cielo para o estorno.');
+  }, [open]);
 
   /**
    * Cancela a espera por uma resposta da Cielo (ex: usuário voltou sem pagar).
    */
   const cancelWait = useCallback(() => {
-    if (resolveRef.current) {
-      settle({ success: false, error: 'Pagamento cancelado pelo operador.' });
-    }
+    settleRef.current?.({ success: false, error: 'Pagamento cancelado pelo operador.' });
   }, []);
 
   return { sendPayment, sendReversal, printText, cancelWait, isWaiting };

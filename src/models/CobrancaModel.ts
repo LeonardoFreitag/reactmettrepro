@@ -68,4 +68,6 @@ export type PagamentoRecord = {
   nsu: string;
   estornado?: boolean;
   consumido?: boolean;
+  /** true = aprovado na maquineta mas ainda na fila de saída (servidor não tem). */
+  pendenteSync?: boolean;
 };

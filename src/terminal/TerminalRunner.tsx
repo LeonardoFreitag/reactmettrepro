@@ -18,7 +18,7 @@ import { useSelector } from 'react-redux';
 import { RootState } from '../store/combineReducers';
 import { navigationRef } from '../routes/navigationRef';
 import { claimCobranca, fetchCobranca, fetchPendentes } from '../sync/cobrancasApi';
-import { enqueuePatch } from '../sync/outbox';
+import { enqueuePatch, getLocalStatusMap } from '../sync/outbox';
 import { getTerminalState, setApiOnline, setBusy, getCurrentCobrancaId, setCurrentCobrancaId } from './state';
 import { ehRotaDePlantao, modoTerminalConfigurado } from './ativo';
 
@@ -45,6 +45,12 @@ export function TerminalRunner() {
     (async () => {
       const id = await getCurrentCobrancaId();
       if (!id) return;
+      // A resposta da maquineta pode ter chegado no cold start (Linking.getInitialURL):
+      // nesse caso o inbox já enfileirou o PATCH e não há o que perguntar.
+      if ((await getLocalStatusMap())[id] === 'pending_sync') {
+        await setCurrentCobrancaId(null);
+        return;
+      }
       let cobranca = null;
       try {
         cobranca = await fetchCobranca(id);

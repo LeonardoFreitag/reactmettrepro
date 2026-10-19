@@ -8,8 +8,11 @@
  * - id da cobrança em andamento persistido em AsyncStorage (recuperação após reinício).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 
 const KEY_CURRENT = 'terminal.current';
+/** Tag do expo-keep-awake: a tela não apaga enquanto a maquineta aguarda o cliente (Pix demora). */
+const KEEP_AWAKE_TAG = 'maquineta';
 
 /** Falhas seguidas antes de a tela de espera declarar "sem comunicação". */
 export const FALHAS_ATE_AVISAR = 3;
@@ -60,8 +63,16 @@ export function semComunicacao(s: TerminalState = state): boolean {
   return s.falhasSeguidas >= FALHAS_ATE_AVISAR;
 }
 
-export function incProviderWaiting() { state.providerWaiting += 1; notify(); }
-export function decProviderWaiting() { state.providerWaiting = Math.max(0, state.providerWaiting - 1); notify(); }
+export function incProviderWaiting() {
+  state.providerWaiting += 1;
+  if (state.providerWaiting === 1) activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {});
+  notify();
+}
+export function decProviderWaiting() {
+  state.providerWaiting = Math.max(0, state.providerWaiting - 1);
+  if (state.providerWaiting === 0) deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {});
+  notify();
+}
 export function subscribeTerminal(l: Listener): () => void {
   listeners.add(l);
   return () => { listeners.delete(l); };

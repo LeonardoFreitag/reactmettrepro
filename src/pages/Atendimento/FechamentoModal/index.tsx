@@ -527,7 +527,9 @@ export function FechamentoModal({
                 <Text style={styles.historyText}>
                   R$ {p.valorPago.toFixed(2)} — {methodLabel(p.meioPagamento)}
                 </Text>
-                <Text style={styles.historyAuth}>Auth: {p.authCode}</Text>
+                <Text style={styles.historyAuth}>
+                  Auth: {p.authCode}{p.pendenteSync ? ' (a sincronizar)' : ''}
+                </Text>
               </View>
             ))}
           </View>

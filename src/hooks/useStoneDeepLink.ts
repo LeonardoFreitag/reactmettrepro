@@ -7,96 +7,47 @@
  *  Cancelamento: cancel-app://cancel?return_scheme=order&amount=<centavos>&editable_amount=0&atk=<atk>
  *  Impressão:    printer-app://print?return_scheme=order&...  (só se a homologação exigir)
  *
- * Retorno no scheme do app (`order://…`) com os parâmetros na query string:
- *  atk, authorization_code, brand, cardholder_name, itk, pan, entry_mode,
- *  installment_count, transaction_type, order_id, amount, e `reason`/`status` em erro.
- * Mesmos nomes de parâmetro do app "AutoMax Stone POS" (homologado 14/09/2026).
- *
- * O callback da Cielo é `order://response` — este hook ignora essa URL, e o da
- * Cielo ignora as demais, então os dois listeners convivem.
+ * O retorno (`order://…`, query string) é lido pelo inbox global
+ * (payment/deepLinkInbox.ts), inclusive no cold start; o parser puro está em
+ * payment/stoneCallback.ts. Este hook só registra quem espera.
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Linking } from 'react-native';
+import { STONE_RETURN_SCHEME, StoneResponse, StoneResult, interpretStoneResponse } from '../payment/stoneCallback';
+import { registerWaiter } from '../payment/deepLinkInbox';
 
-const RETURN_SCHEME = 'order';
-const CIELO_CALLBACK_PREFIX = 'order://response';
+export type { StoneResponse, StoneResult };
+export { interpretStoneResponse };
+
+const RETURN_SCHEME = STONE_RETURN_SCHEME;
 const STONE_PAY_URI = 'payment-app://pay';
 const STONE_CANCEL_URI = 'cancel-app://cancel';
 const STONE_PRINT_URI = 'printer-app://print';
 
-export type StoneResponse = Record<string, string>;
-
-export type StoneResult =
-  | { success: true; data: StoneResponse }
-  | { success: false; error: string; canceledByUser?: boolean; data?: StoneResponse };
-
-function parseQuery(url: string): StoneResponse {
-  const params: StoneResponse = {};
-  const qIdx = url.indexOf('?');
-  if (qIdx === -1) return params;
-  url.slice(qIdx + 1).split('&').forEach(pair => {
-    const eq = pair.indexOf('=');
-    if (eq === -1) return;
-    const k = pair.substring(0, eq);
-    const v = pair.substring(eq + 1);
-    if (!k) return;
-    try { params[k] = decodeURIComponent(v.replace(/\+/g, ' ')); } catch { params[k] = v; }
-  });
-  return params;
-}
-
-const FAIL_STATUS = ['error', 'fail', 'failed', 'declined', 'denied', 'unauthorized', 'canceled', 'cancelled', 'refused'];
-
-/** Interpreta o retorno da Stone: sucesso quando não há `reason`/status de falha. */
-export function interpretStoneResponse(data: StoneResponse, expectAtk: boolean): StoneResult {
-  const reason = (data.reason ?? data.error ?? data.error_message ?? '').trim();
-  const status = (data.status ?? data.result ?? '').trim().toLowerCase();
-  const failed = !!reason || FAIL_STATUS.includes(status);
-  if (failed) {
-    const msg = reason || `Operação não aprovada (${status || 'sem status'})`;
-    return { success: false, error: msg, canceledByUser: /cancel/i.test(status) || /cancelad/i.test(msg), data };
-  }
-  if (expectAtk && !data.atk) {
-    return { success: false, error: 'Retorno da Stone sem ATK.', data };
-  }
-  return { success: true, data };
-}
-
 export function useStoneDeepLink() {
   const [isWaiting, setIsWaiting] = useState(false);
-  const resolveRef = useRef<((r: StoneResult) => void) | null>(null);
-  const expectAtkRef = useRef(true);
+  const settleRef = useRef<((r: StoneResult) => void) | null>(null);
+  const unregisterRef = useRef<(() => void) | null>(null);
 
-  useEffect(() => {
-    const subscription = Linking.addEventListener('url', handleDeepLinkUrl);
-    return () => subscription.remove();
+  useEffect(() => () => {
+    unregisterRef.current?.();
+    unregisterRef.current = null;
+    settleRef.current = null;
   }, []);
-
-  function handleDeepLinkUrl({ url }: { url: string }) {
-    if (!url.startsWith(`${RETURN_SCHEME}://`)) return;
-    if (url.startsWith(CIELO_CALLBACK_PREFIX)) return; // callback da Cielo
-    if (!resolveRef.current) return;                    // nenhuma operação Stone pendente
-    try {
-      const data = parseQuery(url);
-      settle(interpretStoneResponse(data, expectAtkRef.current));
-    } catch {
-      settle({ success: false, error: 'Erro ao processar retorno da Stone.' });
-    }
-  }
-
-  function settle(result: StoneResult) {
-    setIsWaiting(false);
-    if (resolveRef.current) {
-      resolveRef.current(result);
-      resolveRef.current = null;
-    }
-  }
 
   function open(uri: string, expectAtk: boolean, openError: string): Promise<StoneResult> {
     setIsWaiting(true);
-    expectAtkRef.current = expectAtk;
     return new Promise<StoneResult>(resolve => {
-      resolveRef.current = resolve;
+      const settle = (r: StoneResult) => {
+        if (settleRef.current !== settle) return;
+        settleRef.current = null;
+        unregisterRef.current?.();
+        unregisterRef.current = null;
+        setIsWaiting(false);
+        resolve(r);
+      };
+      settleRef.current = settle;
+      unregisterRef.current = registerWaiter({ provider: 'STONE', expectAtk, resolve: settle });
       Linking.openURL(uri).catch(() => settle({ success: false, error: openError }));
     });
   }
@@ -141,7 +92,7 @@ export function useStoneDeepLink() {
   }, []);
 
   const cancelWait = useCallback(() => {
-    if (resolveRef.current) settle({ success: false, error: 'Operação cancelada pelo operador.', canceledByUser: true });
+    settleRef.current?.({ success: false, error: 'Operação cancelada pelo operador.', canceledByUser: true });
   }, []);
 
   return { sendPayment, sendCancel, printText, cancelWait, isWaiting };

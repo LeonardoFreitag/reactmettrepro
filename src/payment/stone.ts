@@ -1,34 +1,21 @@
 /**
  * Adaptador Stone SmartPOS (Deeplink, sem SDK) — Etapa B.
  * Mesma interface `PaymentProvider` do adaptador Cielo. Não há credenciais no
- * app: o Deeplink da Stone não usa token.
+ * app: o Deeplink da Stone não usa token. O parser puro do retorno está em
+ * stoneCallback.ts (compartilhado com o inbox global).
  */
 import { useEffect, useMemo } from 'react';
 import { ConfigModel } from '../models/ConfigModel';
-import { useStoneDeepLink, StoneResponse } from '../hooks/useStoneDeepLink';
+import { useStoneDeepLink } from '../hooks/useStoneDeepLink';
 import { incProviderWaiting, decProviderWaiting } from '../terminal/state';
+import { stoneProviderData } from './stoneCallback';
 import { PaymentProvider, PaymentRequest, PaymentResult, ReversalRequest, TransactionType } from './types';
+
+export { stoneProviderData } from './stoneCallback';
 
 /** Stone: sem credenciais; basta o provedor estar selecionado. */
 export function isStoneConfigured(config: ConfigModel): boolean {
   return config.provider === 'STONE';
-}
-
-/** Normaliza o retorno do Deeplink para `providerData` (o que a API grava). */
-export function stoneProviderData(data: StoneResponse, terminalId?: string) {
-  return {
-    atk: data.atk ?? '',
-    itk: data.itk ?? '',
-    authorizationCode: data.authorization_code ?? '',
-    brand: data.brand ?? '',
-    panMasked: data.pan ?? '',
-    entryMode: data.entry_mode ?? '',
-    installmentCount: Number(data.installment_count ?? 1) || 1,
-    transactionType: (data.transaction_type ?? '') as TransactionType | '',
-    orderId: data.order_id ?? '',
-    cardholderName: data.cardholder_name ?? '',
-    terminalId: terminalId ?? '',
-  };
 }
 
 export function useStoneProvider(config: ConfigModel): PaymentProvider {
@@ -65,7 +52,8 @@ export function useStoneProvider(config: ConfigModel): PaymentProvider {
         brand: pd.brand,
         authCode: pd.authorizationCode,
         nsu: pd.authorizationCode,
-        providerData: pd,
+        // `reference` = order_id enviado (<origem>:<codVenda>:<idLocal>) — a API grava em REFERENCIA.
+        providerData: { ...pd, reference: req.reference },
         rawResponse: d,
       };
     },

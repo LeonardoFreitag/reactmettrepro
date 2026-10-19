@@ -4,6 +4,7 @@
  */
 import { Cobranca } from '../models/CobrancaModel';
 import { PaymentProvider, PaymentResult, TransactionType } from '../payment/types';
+import { concluirPendente, iniciarPendente } from '../payment/pending';
 import { buildDesfecho, DesfechoBody } from './cobrancasApi';
 import { enqueuePatch, registrarConcluida } from './outbox';
 
@@ -65,19 +66,42 @@ export async function executarCobranca(
       transactionType: cobranca.tipoPre ?? 'CREDIT',
       installments: Math.max(cobranca.parcelasPre || 1, 1),
     };
-    result = await provider.pay({
+    // Registro persistido ANTES do Deep Link: se o app for morto durante o Pix, o
+    // inbox (payment/deepLinkInbox.ts) casa a resposta pela `reference` e grava o
+    // PATCH da cobrança sozinho. `reference` única por tentativa — na Stone vira o
+    // order_id, que a API usa como CIELO_ORDER_ID (índice único por provedor).
+    const pendente = await iniciarPendente({
+      provider: provider.name,
+      origem: cobranca.origem,
+      codVenda: cobranca.codVenda,
+      cobrancaId: cobranca.id,
+      terminalId,
       amountCents: cobranca.valorCents,
+      totalCents: cobranca.valorCents,
+      paidBeforeCents: 0,
       transactionType: m.transactionType,
       installments: m.installments,
       voucherKind: m.voucherKind,
-      reference: cobranca.externalRef ?? cobranca.id,
-      items: [{
-        name: descricaoCobranca(cobranca).slice(0, 60),
-        quantity: 1,
-        sku: cobranca.externalRef ?? cobranca.id,
-        unitPrice: cobranca.valorCents,
-      }],
+      itens: [],
+      descricao: descricaoCobranca(cobranca),
     });
+    try {
+      result = await provider.pay({
+        amountCents: cobranca.valorCents,
+        transactionType: m.transactionType,
+        installments: m.installments,
+        voucherKind: m.voucherKind,
+        reference: pendente.reference,
+        items: [{
+          name: descricaoCobranca(cobranca).slice(0, 60),
+          quantity: 1,
+          sku: cobranca.externalRef ?? cobranca.id,
+          unitPrice: cobranca.valorCents,
+        }],
+      });
+    } finally {
+      await concluirPendente(pendente.idLocal);
+    }
     desfecho = result.success
       ? buildDesfecho(terminalId, provider.name, { success: true, value: result })
       : buildDesfecho(terminalId, provider.name, { success: false, error: result.error, canceledByUser: result.canceledByUser });

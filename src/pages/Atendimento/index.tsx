@@ -23,7 +23,13 @@ import { FechamentoModal, PagoPorItem, SelecaoItem } from './FechamentoModal';
 import { PagamentoRecord, ItemPagoRecord } from '../../models/CobrancaModel';
 import { AppStackParamList } from '../../routes';
 import { COLORS, FONT_FAMILY, FONT_SIZE } from '../../theme';
-import { usePaymentProvider, PaymentMethodOption } from '../../payment';
+import { usePaymentProvider, PaymentMethodOption, PaymentResult } from '../../payment';
+import { iniciarPendente, concluirPendente } from '../../payment/pending';
+import { foiGravadoPeloInbox, montarPagamentoBody, subscribeInbox } from '../../payment/deepLinkInbox';
+import {
+  drainNow, enqueuePagamento, getErroPagamento, getPagamentosNaFila, subscribe as subscribeOutbox,
+} from '../../sync/outbox';
+import { ItemFila, mesclarPagamentos, somarItens } from './pagamentosLocais';
 
 type Nav = NativeStackNavigationProp<AppStackParamList, 'atendimento'>;
 
@@ -61,33 +67,61 @@ export function Atendimento() {
 
   const isClosed = comandaEdit.status?.trim() === 'F';
 
+  // Pagamentos aprovados na maquineta que o servidor RECUSOU (4xx) nesta sessão: o
+  // operador anota o código e segue; continuam contando localmente para o modal.
+  const rejeitadosRef = useRef<{ records: PagamentoRecord[]; itens: Array<ItemFila['body']['itens']> }>({ records: [], itens: [] });
+
   useEffect(() => {
     loadItems();
     loadCieloPagamentos();
+    // A fila de saída mudou (pagamento enviado/recusado) ou o inbox gravou um pagamento
+    // desta comanda sem passar pela tela (resposta chegou após recriação do app):
+    // recarrega "já pago" do servidor + fila.
+    const codVenda = Number(comandaEdit.codigo);
+    const unsubOutbox = subscribeOutbox(() => { void loadCieloPagamentos(); });
+    const unsubInbox = subscribeInbox(ev => {
+      if (ev.gravado && ev.pendente?.codVenda === codVenda) void loadCieloPagamentos();
+    });
+    return () => { unsubOutbox(); unsubInbox(); };
   }, []);
 
   /**
-   * Carrega do servidor os pagamentos de maquineta já registrados para a comanda.
+   * Carrega "já pago" da comanda: servidor (fonte de verdade) + pagamentos aprovados
+   * que ainda estão na fila de saída (POST /pagamentos pendente) + recusados na sessão.
    * Garante que, ao reabrir uma comanda já recebida (total ou parcialmente),
    * o app saiba o quanto já foi pago e não permita cobrar de novo.
    */
   async function loadCieloPagamentos() {
     if (!comandaEdit.codigo || !companyEdit.ip) return;
+    const codVenda = Number(comandaEdit.codigo);
+    let servidor: PagamentoRecord[] | null = null;
+    let itensServidor: ItemPagoRecord[] | null = null;
     try {
       const api = setUrl(companyEdit.ip, companyEdit.porta);
       const { data } = await api.get<{ pagamentos: PagamentoRecord[]; itensPagos?: ItemPagoRecord[] }>(
-        `/pagamentos/M/${Number(comandaEdit.codigo)}`
+        `/pagamentos/M/${codVenda}`
       );
-      setCieloPagamentos(data.pagamentos ?? []);
-      // Reconstrói a marcação por item (servidor desatualizado → itensPagos ausente → mantém o local).
-      if (Array.isArray(data.itensPagos)) {
-        const next: PagoPorItem = {};
-        data.itensPagos.forEach(ip => {
-          next[String(ip.codItem)] = { qtde: Number(ip.qtde) || 0, valor: Number(ip.valor) || 0 };
-        });
-        setPagoPorItem(next);
-      }
+      servidor = data.pagamentos ?? [];
+      // Servidor desatualizado → itensPagos ausente → mantém a marcação local.
+      itensServidor = Array.isArray(data.itensPagos) ? data.itensPagos : null;
     } catch {}
+    // Lida DEPOIS do servidor: o que saiu da fila nesse meio tempo já está no servidor.
+    const fila = await getPagamentosNaFila(codVenda);
+    const rej = rejeitadosRef.current;
+
+    if (servidor) {
+      setCieloPagamentos(mesclarPagamentos(servidor, fila, rej.records));
+    } else {
+      // Sem servidor agora: mantém o que já tinha e acrescenta o que está na fila.
+      setCieloPagamentos(prev => mesclarPagamentos(prev.filter(p => !p.pendenteSync), fila, rej.records));
+    }
+    if (itensServidor) {
+      const base: PagoPorItem = {};
+      itensServidor.forEach(ip => {
+        base[String(ip.codItem)] = { qtde: Number(ip.qtde) || 0, valor: Number(ip.valor) || 0 };
+      });
+      setPagoPorItem(somarItens(base, [...fila.map(f => f.body.itens), ...rej.itens]));
+    }
   }
 
   async function loadItems() {
@@ -212,6 +246,9 @@ export function Atendimento() {
    */
   async function handleFechamentoCielo() {
     setShowFechamento(false);
+    // Os pagamentos vão pela fila de saída: envia o que estiver pendente ANTES de
+    // fechar a conta, para o caixa ver os pagamentos junto com a impressão.
+    await drainNow();
     try {
       const api = setUrl(companyEdit.ip, companyEdit.porta);
       await api.post('/mesas/fechaConta', { codigo: comandaEdit.codigo, destino: 'F' });
@@ -227,8 +264,10 @@ export function Atendimento() {
   }
 
   /**
-   * Fluxo de maquineta: provider.pay (Deep Link) → aguarda resposta → salva no banco.
-   * Retorna { authCode } em caso de sucesso ou null em falha.
+   * Fluxo de maquineta: grava o pendente → provider.pay (Deep Link) → aguarda
+   * resposta (entregue pelo inbox global, que já enfileira o POST /pagamentos na
+   * fila de saída) → tenta sincronizar e avisa o operador se o servidor recusou
+   * ou está fora. Retorna { authCode } em caso de sucesso ou null em falha.
    * Quem decide fechar a conta é o FechamentoModal (quando o total pago for atingido),
    * chamando onCieloComplete → handleFechamentoCielo.
    */
@@ -251,115 +290,105 @@ export function Atendimento() {
       };
     });
 
-    const result = await provider.pay({
+    const codVenda = Number(comandaEdit.codigo);
+    const paidBeforeCents = Math.round(cieloPagamentos.reduce((s, p) => s + p.valorPago, 0) * 100);
+
+    // Registro persistido ANTES do Deep Link: se o Android matar o app enquanto o
+    // cliente lê o QR Code do Pix, a resposta chega como intent de lançamento e o
+    // inbox a casa com este registro pela `reference` (M:<codVenda>:<idLocal>).
+    const pendente = await iniciarPendente({
+      provider:        provider.name,
+      origem:          'M',
+      codVenda,
       amountCents,
+      totalCents:      Math.round(total * 100),
+      paidBeforeCents,
       transactionType: method.transactionType,
       installments:    method.installments,
       voucherKind:     method.voucherKind,
-      items:           cieloItems,
-      reference:       `Comanda ${comandaEdit.comanda}`,
+      itens:           selecao,
+      descricao:       `Comanda ${comandaEdit.comanda}`,
     });
+
+    let result: PaymentResult;
+    try {
+      result = await provider.pay({
+        amountCents,
+        transactionType: method.transactionType,
+        installments:    method.installments,
+        voucherKind:     method.voucherKind,
+        items:           cieloItems,
+        reference:       pendente.reference,
+      });
+    } finally {
+      await concluirPendente(pendente.idLocal);
+    }
 
     if (!result.success) {
       Alert.alert('Pagamento não concluído', result.error);
       return null;
     }
 
-    const saved = await salvarPagamentoCielo(result, amountCents, total, selecao);
-    if (saved) {
-      // Marca os itens selecionados como pagos (acumula por item). Mantido
-      // localmente mesmo se o servidor falhou e o operador escolheu prosseguir.
-      if (selecao.length) {
-        setPagoPorItem(prev => {
-          const next = { ...prev };
-          selecao.forEach(({ codigo, qtde, valor }) => {
-            const cur = next[codigo] ?? { qtde: 0, valor: 0 };
-            next[codigo] = {
-              qtde:  cur.qtde + qtde,
-              valor: Math.round((cur.valor + valor) * 100) / 100,
-            };
-          });
-          return next;
-        });
-      }
-      // Registra localmente (mesmo que o servidor tenha falhado e o operador
-      // tenha escolhido prosseguir) para que o modal contabilize o valor recebido.
-      setCieloPagamentos(prev => [
-        ...prev,
-        {
-          id:              Date.now(),
-          provider:        provider.name,
-          transactionType: result.transactionType,
-          meioPagamento:   String(result.providerData.paymentCode ?? result.transactionType),
-          bandeira:        result.brand,
-          valorPago:       amountCents / 100,
-          authCode:        saved.authCode,
-          nsu:             result.nsu,
-        },
-      ]);
+    // O inbox já enfileirou o POST /pagamentos ao entregar a resposta. Garantia
+    // extra (não casou o pendente): enfileira daqui — a fila deduplica por idLocal.
+    if (!foiGravadoPeloInbox(pendente.idLocal)) {
+      await enqueuePagamento(pendente.idLocal, montarPagamentoBody(pendente, result));
     }
-    return saved;
+
+    const authCode = result.authCode || '-';
+    const recusado = await informarSincronizacao(pendente.idLocal, codVenda, authCode);
+    if (recusado) {
+      // Servidor recusou (4xx): segue contando localmente, como antes ("prosseguir assim mesmo").
+      rejeitadosRef.current.records.push({
+        id:              -Date.now(),
+        provider:        provider.name,
+        transactionType: result.transactionType,
+        meioPagamento:   String(result.providerData.paymentCode ?? result.transactionType),
+        bandeira:        result.brand,
+        valorPago:       amountCents / 100,
+        authCode,
+        nsu:             result.nsu,
+      });
+      if (selecao.length) {
+        rejeitadosRef.current.itens.push(
+          selecao.map(s => ({ codItem: Number(s.codigo), codConjuga: s.codConjuga, qtde: s.qtde, valor: s.valor })),
+        );
+      }
+    }
+    // Recarrega "já pago" (servidor + fila + recusados): é o que o modal usa para
+    // bloquear nova cobrança e riscar os itens pagos.
+    await loadCieloPagamentos();
+    return { authCode };
   }
 
   /**
-   * Persiste os dados do pagamento na API (Firebird) — POST /pagamentos.
-   * Falha não-bloqueante: pagamento já aprovado na maquineta.
-   * Retorna authCode em caso de sucesso ou após o operador escolher prosseguir.
+   * Tenta enviar a fila agora e avisa o operador do resultado do registro:
+   * servidor recusou (4xx → `erros`) ou sem conexão (continua na fila; reenvio
+   * automático). Devolve true quando o servidor recusou.
    */
-  async function salvarPagamentoCielo(
-    pago: Extract<Awaited<ReturnType<typeof provider.pay>>, { success: true }>,
-    amountCents: number,
-    totalConta: number,
-    selecao: SelecaoItem[] = [],
-  ): Promise<{ authCode: string } | null> {
-    const authCode = pago.authCode || '-';
-
-    try {
-      const api = setUrl(companyEdit.ip, companyEdit.porta);
-      await api.post('/pagamentos', {
-        provider:        provider.name,
-        origem:          'M',
-        codVenda:        Number(comandaEdit.codigo),
-        transactionType: pago.transactionType,
-        installments:    Math.max(pago.installments, 1),
-        amountCents,
-        totalCents:      Math.round(totalConta * 100),
-        providerData:    pago.providerData,
-        rawResponse:     pago.rawResponse,
-        // Itens cobertos por esta cobrança (persistidos em CIELO_PAGAMENTOS_ITENS)
-        itens: selecao.length
-          ? selecao.map(s => ({
-              codItem:    Number(s.codigo),
-              codConjuga: s.codConjuga,
-              qtde:       s.qtde,
-              valor:      s.valor,
-            }))
-          : undefined,
-      });
-      return { authCode };
-    } catch (err: any) {
-      const status = err?.response?.status;
+  async function informarSincronizacao(idLocal: string, codVenda: number, authCode: string): Promise<boolean> {
+    await drainNow();
+    const erro = await getErroPagamento(idLocal);
+    if (erro) {
+      const status = erro.httpStatus;
       const detalhe = status === 401 ? ' (chave da API inválida — confira em Configurações > Maquineta)'
         : status === 404 ? ' (servidor desatualizado: rota /pagamentos ausente)'
-        : status ? ` (HTTP ${status})` : '';
-      return new Promise(resolve => {
-        Alert.alert(
-          'Pagamento aprovado',
-          `Autorização: ${authCode}\n\nAtenção: não foi possível registrar no servidor${detalhe}. Anote o código e registre manualmente.`,
-          [
-            {
-              text: 'Tentar novamente',
-              onPress: async () => resolve(await salvarPagamentoCielo(pago, amountCents, totalConta, selecao)),
-            },
-            {
-              text: 'Prosseguir assim mesmo',
-              style: 'destructive',
-              onPress: () => resolve({ authCode }),
-            },
-          ],
-        );
-      });
+        : status === 422 ? ` (dados recusados: ${JSON.stringify(erro.resposta ?? '').slice(0, 120)})`
+        : ` (HTTP ${status})`;
+      Alert.alert(
+        'Pagamento aprovado',
+        `Autorização: ${authCode}\n\nAtenção: o servidor recusou o registro${detalhe}. Anote o código e registre manualmente.`,
+      );
+      return true;
     }
+    const fila = await getPagamentosNaFila(codVenda);
+    if (fila.some(i => i.cobrancaId === idLocal)) {
+      Alert.alert(
+        'Pagamento aprovado',
+        `Autorização: ${authCode}\n\nSem conexão com o servidor: o registro será enviado automaticamente quando a conexão voltar.`,
+      );
+    }
+    return false;
   }
 
   function handleDelete() {

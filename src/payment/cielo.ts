@@ -1,78 +1,24 @@
 /**
  * Adaptador Cielo Smart — envolve o `useCieloDeepLink` existente (sem alterar
  * o comportamento do Deep Link) e o expõe pela interface `PaymentProvider`.
+ * O de/para puro (paymentCode, normalização da resposta) está em cieloMapping.ts.
  */
 import { useEffect, useMemo } from 'react';
-import { useCieloDeepLink, CieloResult } from '../hooks/useCieloDeepLink';
-import { CieloPaymentResponse } from '../models/CieloModel';
+import { useCieloDeepLink } from '../hooks/useCieloDeepLink';
 import { ConfigModel } from '../models/ConfigModel';
 import { incProviderWaiting, decProviderWaiting } from '../terminal/state';
-import {
-  PaymentProvider, PaymentRequest, PaymentResult, ReversalRequest, TransactionType,
-} from './types';
+import { normalizeCieloFail, normalizeCieloOk, toCieloPaymentCode } from './cieloMapping';
+import { PaymentProvider, PaymentRequest, PaymentResult, ReversalRequest, TransactionType } from './types';
 
-/** transactionType + installments → paymentCode da Cielo. */
-export function toCieloPaymentCode(req: Pick<PaymentRequest, 'transactionType' | 'installments' | 'voucherKind'>): string {
-  switch (req.transactionType) {
-    case 'CREDIT':
-      return req.installments === 1 ? 'CREDITO_AVISTA' : 'CREDITO_PARCELADO_LOJA';
-    case 'DEBIT':
-      return 'DEBITO_AVISTA';
-    case 'INSTANT_PAYMENT':
-      return 'PIX';
-    case 'VOUCHER':
-      return req.voucherKind === 'ALIMENTACAO' ? 'VOUCHER_ALIMENTACAO' : 'VOUCHER_REFEICAO';
-    default:
-      return 'CREDITO_AVISTA';
-  }
-}
-
-/** paymentCode da Cielo → transactionType normalizado. */
-export function fromCieloPaymentCode(code: string): TransactionType {
-  const c = (code ?? '').toUpperCase();
-  if (c.startsWith('DEBITO')) return 'DEBIT';
-  if (c.startsWith('PIX')) return 'INSTANT_PAYMENT';
-  if (c.startsWith('VOUCHER')) return 'VOUCHER';
-  return 'CREDIT';
-}
-
-function normalizeOk(
-  result: Extract<CieloResult, { success: true }>,
-  paymentCode: string,
-  req: { transactionType: TransactionType; installments: number; amountCents: number },
-): PaymentResult {
-  const data: CieloPaymentResponse = result.data;
-  const p = data.payments?.[0];
-  const fields = p?.paymentFields;
-  return {
-    success: true,
-    transactionType: req.transactionType,
-    installments: Number(p?.installments) > 0 ? Number(p!.installments) : Math.max(req.installments, 1),
-    amountCents: Number(p?.amount) > 0 ? Math.round(Number(p!.amount)) : req.amountCents,
-    brand: p?.brand ?? '',
-    authCode: p?.authCode ?? '',
-    nsu: fields?.paymentTransactionId ?? p?.externalId ?? '',
-    providerData: { paymentCode },
-    rawResponse: data,
-  };
-}
-
-function normalizeFail(result: Extract<CieloResult, { success: false }>): PaymentResult {
-  return {
-    success: false,
-    error: result.error,
-    errorCode: result.errorCode,
-    // Cielo: code 1 = cancelado pelo usuário
-    canceledByUser: result.errorCode === 1 || /cancelad/i.test(result.error ?? ''),
-  };
-}
+export { toCieloPaymentCode, fromCieloPaymentCode } from './cieloMapping';
 
 export function useCieloProvider(config: ConfigModel): PaymentProvider {
   const { sendPayment, sendReversal, printText, isWaiting } = useCieloDeepLink();
   const accessToken = config.cieloAccessToken ?? '';
   const clientID = config.cieloClientId ?? '';
 
-  // Sinaliza globalmente "maquineta ocupada" (o poller do modo Terminal não dispara por cima).
+  // Sinaliza globalmente "maquineta ocupada" (o poller do modo Terminal não dispara
+  // por cima; a tela fica acesa — expo-keep-awake — enquanto o cliente paga).
   useEffect(() => {
     if (!isWaiting) return;
     incProviderWaiting();
@@ -100,7 +46,7 @@ export function useCieloProvider(config: ConfigModel): PaymentProvider {
         // 0 = "a Cielo pergunta" (fluxo do garçom); n>1 = pré-seleção do caixa/operador.
         installments: req.transactionType === 'CREDIT' && req.installments > 1 ? req.installments : 0,
       });
-      return result.success ? normalizeOk(result, paymentCode, req) : normalizeFail(result);
+      return result.success ? normalizeCieloOk(result, paymentCode, req) : normalizeCieloFail(result);
     },
 
     async reverse({ alvo }: ReversalRequest): Promise<PaymentResult> {
@@ -114,9 +60,9 @@ export function useCieloProvider(config: ConfigModel): PaymentProvider {
         authCode: alvo.authCode,
         cieloCode: alvo.cieloCode ?? '',
       });
-      if (!result.success) return normalizeFail(result);
+      if (!result.success) return normalizeCieloFail(result);
       const tt = (alvo.transactionType as TransactionType) || 'CREDIT';
-      return normalizeOk(result, 'ESTORNO', {
+      return normalizeCieloOk(result, 'ESTORNO', {
         transactionType: tt,
         installments: alvo.installments,
         amountCents: alvo.valorCents,
